@@ -19,7 +19,7 @@ class HexToolsTests(unittest.TestCase):
         self.assertIn("#define VK_NO_PROTOTYPES",smoke)
         self.assertIn("gow3_vk_get_instance_proc_addr()",smoke)
         self.assertIn("HEX:transfer_readback=",smoke)
-        for fmt in ("BC4_UNORM","BC5_UNORM","BC6H_UFLOAT","BC7_SRGB","ASTC_4x4_UNORM","RGBA16F"):
+        for fmt in ("BC4_UNORM","BC5_UNORM","BC6H_SFLOAT","BC6H_UFLOAT","BC7_UNORM","BC7_SRGB","ASTC_4x4_UNORM","RGBA16F"):
             self.assertIn(fmt,smoke)
 
     def test_stable_xclipse_default_is_zero_workers(self):
