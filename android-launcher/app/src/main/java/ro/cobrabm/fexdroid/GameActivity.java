@@ -307,6 +307,17 @@ public final class GameActivity extends Activity {
                 env.put("GOW3_VULKAN_DRIVER",custom.getAbsolutePath());
                 env.put("LD_LIBRARY_PATH",custom.getParent()+":"+getApplicationInfo().nativeLibraryDir);
             }
+            // Apply the upstream RADV Xclipse compatibility switches only when the
+            // selected driver is RADV and the actual EGL renderer is an Xclipse GPU.
+            // The system Vulkan driver and all non-Xclipse devices keep their defaults.
+            String glRenderer="";
+            try { glRenderer=BuiltinDrivers.renderer(); }
+            catch(Throwable ignored) { /* Unknown renderer: do not guess a GPU profile. */ }
+            String driverName=getSharedPreferences("tlou",MODE_PRIVATE).getString("driver_name","");
+            if(XclipseRadvProfile.apply(env,glRenderer,driverName)) {
+                RunLog.write(this,"Xclipse RADV compatibility profile enabled for "+glRenderer+
+                    " ("+driverName+"): DCC off, upstream depth flush, BC6H UFLOAT RGBA16F, BC7 ASTC, linear AHB, RADV diagnostics");
+            }
             builder.directory(app0);
             builder.redirectErrorStream(true);
             builder.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile));
