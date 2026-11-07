@@ -493,7 +493,11 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& 
                 const bool depth = format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD32Sfloat ||
                                    depth16;
                 const bool bc1 = format == vk::Format::eBc1RgbaUnormBlock ||
-                                 format == vk::Format::eBc1RgbaSrgbBlock;
+                                 format == vk::Format::eBc1RgbaSrgbBlock ||
+                                 format == vk::Format::eBc1RgbUnormBlock ||
+                                 format == vk::Format::eBc1RgbSrgbBlock ||
+                                 format == vk::Format::eBc4UnormBlock ||
+                                 format == vk::Format::eBc4SnormBlock;
                 const bool bc5 = format == vk::Format::eBc5UnormBlock ||
                                  format == vk::Format::eBc5SnormBlock;
                 const bool bc16 = bc5 || format == vk::Format::eBc3UnormBlock ||
@@ -501,7 +505,9 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& 
                                   format == vk::Format::eBc2UnormBlock ||
                                   format == vk::Format::eBc2SrgbBlock ||
                                   format == vk::Format::eBc7UnormBlock ||
-                                  format == vk::Format::eBc7SrgbBlock;
+                                  format == vk::Format::eBc7SrgbBlock ||
+                                  format == vk::Format::eBc6HUfloatBlock ||
+                                  format == vk::Format::eBc6HSfloatBlock;
                 bool compressed = bc1 || bc16;
                 u32 bytes = format == vk::Format::eR8Unorm ? 1
                             : format == vk::Format::eR8G8Unorm || depth16 ? 2
