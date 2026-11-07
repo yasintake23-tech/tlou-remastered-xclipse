@@ -18,6 +18,7 @@
         <category android:name="android.intent.category.GAME" />
       </intent-filter>
     </activity>
+    <activity android:name="ro.cobrabm.fexdroid.HexSettingsActivity" android:exported="false" />
     <activity android:name="ro.cobrabm.fexdroid.GameActivity"
               android:exported="false"
               android:screenOrientation="sensorLandscape"
