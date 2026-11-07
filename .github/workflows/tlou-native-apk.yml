@@ -244,7 +244,7 @@ jobs:
       - name: Download exact successful v0.1 APK
         uses: actions/download-artifact@v4
         with:
-          name: TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64
+          name: TheLastOfUsRemastered-Android-v0.1-arm64
           path: out/source-apk
           github-token: ${{ github.token }}
           run-id: 42136621594
