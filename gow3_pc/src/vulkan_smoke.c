@@ -41,9 +41,13 @@ static VkResult report_format(VkPhysicalDevice physical,
     VkImageFormatProperties image;
     VkResult r=get_image_props(physical,format,VK_IMAGE_TYPE_2D,
         VK_IMAGE_TILING_OPTIMAL,usage,flags,&image);
+    VkImageFormatProperties sampled_image;
+    VkResult sampled_result=get_image_props(physical,format,VK_IMAGE_TYPE_2D,
+        VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,0,&sampled_image);
     int sampled=(props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)!=0;
-    printf("HEX:format.%s.sampled=%s\n",name,sampled?"yes":"no");
-    printf("HEX:format.%s.image_usage=%s\n",name,result_name(r));
+    printf("HEX:format.%s.sampled_feature=%s\n",name,sampled?"yes":"no");
+    printf("HEX:format.%s.sampled_image_create=%s\n",name,result_name(sampled_result));
+    printf("HEX:format.%s.game_image_create=%s\n",name,result_name(r));
     return r;
 }
 int vulkan_smoke(void) {
@@ -141,12 +145,21 @@ int vulkan_smoke(void) {
         VK_IMAGE_CREATE_EXTENDED_USAGE_BIT|VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT;
     printf("HEX:game_image_usage=TRANSFER_SRC|TRANSFER_DST|SAMPLED|STORAGE\n");
     printf("HEX:game_image_flags=MUTABLE|EXTENDED_USAGE|BLOCK_TEXEL_VIEW_COMPATIBLE\n");
+    printf("HEX:surface_and_swapchain=NOT_TESTED_NO_WINDOW_SURFACE\n");
     report_format(physical,vkGetPhysicalDeviceFormatProperties,vkGetPhysicalDeviceImageFormatProperties,
         "BC4_UNORM",VK_FORMAT_BC4_UNORM_BLOCK,game_usage,game_flags);
     report_format(physical,vkGetPhysicalDeviceFormatProperties,vkGetPhysicalDeviceImageFormatProperties,
+        "BC4_SNORM",VK_FORMAT_BC4_SNORM_BLOCK,game_usage,game_flags);
+    report_format(physical,vkGetPhysicalDeviceFormatProperties,vkGetPhysicalDeviceImageFormatProperties,
         "BC5_UNORM",VK_FORMAT_BC5_UNORM_BLOCK,game_usage,game_flags);
     report_format(physical,vkGetPhysicalDeviceFormatProperties,vkGetPhysicalDeviceImageFormatProperties,
+        "BC5_SNORM",VK_FORMAT_BC5_SNORM_BLOCK,game_usage,game_flags);
+    report_format(physical,vkGetPhysicalDeviceFormatProperties,vkGetPhysicalDeviceImageFormatProperties,
+        "BC6H_SFLOAT",VK_FORMAT_BC6H_SFLOAT_BLOCK,game_usage,game_flags);
+    report_format(physical,vkGetPhysicalDeviceFormatProperties,vkGetPhysicalDeviceImageFormatProperties,
         "BC6H_UFLOAT",VK_FORMAT_BC6H_UFLOAT_BLOCK,game_usage,game_flags);
+    report_format(physical,vkGetPhysicalDeviceFormatProperties,vkGetPhysicalDeviceImageFormatProperties,
+        "BC7_UNORM",VK_FORMAT_BC7_UNORM_BLOCK,game_usage,game_flags);
     report_format(physical,vkGetPhysicalDeviceFormatProperties,vkGetPhysicalDeviceImageFormatProperties,
         "BC7_SRGB",VK_FORMAT_BC7_SRGB_BLOCK,game_usage,game_flags);
     report_format(physical,vkGetPhysicalDeviceFormatProperties,vkGetPhysicalDeviceImageFormatProperties,
