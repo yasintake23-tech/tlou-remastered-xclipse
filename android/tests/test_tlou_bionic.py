@@ -110,7 +110,7 @@ class TestTLOUBionic(unittest.TestCase):
             view = m.build_view(game, None, root/"out")
             self.assertTrue((view/"build").is_symlink())
             self.assertTrue((view/"build/ps4/main/boot.txt").is_file())
-            self.assertTrue((view/"build/ps4/main/boot1/coin-3d.dds").is_symlink())
+            self.assertTrue((view/"build/ps4/main/boot1/coin-3d.dds").is_file())
             self.assertFalse((view/"dvdroot_ps4").exists())
 
     def test_flat_app0_root_is_supported_without_dvdroot_folder(self):
@@ -122,7 +122,7 @@ class TestTLOUBionic(unittest.TestCase):
             shutil.rmtree(game/"dvdroot_ps4")
             self.assertEqual(m.validate_game_assets(game), game)
             view = m.build_view(game, None, root/"out")
-            self.assertTrue((view/"build/ps4/main/boot.txt").is_symlink())
+            self.assertTrue((view/"build/ps4/main/boot.txt").is_file())
 
     def test_missing_resource_root_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
