@@ -81,36 +81,70 @@ def require_game(folder: Path, *, is_update: bool = False) -> dict[str, str]:
     return metadata
 
 
-def validate_game_assets(folder: Path) -> None:
-    """Inspect available PSARC files without rejecting valid installed layouts.
-
-    In the user's working 01.00 installation, /app0 assets are already mounted
-    without a physical dvdroot_ps4 directory under the selected game folder.
-    The native runtime resolves them at launch. This preflight therefore
-    cannot infer installation corruption from a missing optional directory.
-    Never hash or rewrite game data.
-    """
-    root = folder / "dvdroot_ps4"
-    if not root.is_dir():
-        print("Aviso: dvdroot_ps4 ausente no diretório selecionado; "
-              "mantendo layout de jogo anteriormente suportado.", flush=True)
-        return
-    main = root / "build/ps4/main"
-    if not main.is_dir():
-        print("Aviso: build/ps4/main não existe sob dvdroot_ps4; "
-              "sem verificação PSARC opcional.", flush=True)
-        return
-    if not any(main.iterdir()):
-        print("Aviso: diretório build/ps4/main vazio; "
-              "não impedindo a preparação do jogo.", flush=True)
-        return
-    archives = 0
-    for archive in main.glob("*.psarc"):
-        if not archive.is_file():
+def _case_path(base: Path, *parts: str) -> Path:
+    """Resolve a conventional extracted-game path without depending on host case."""
+    current = base
+    for part in parts:
+        direct = current / part
+        if direct.exists():
+            current = direct
             continue
-        # PSARC: fixed 32-byte big-endian header, then a bounded TOC. Just
-        # checking "PSAR" accepts files that are truncated immediately after
-        # the signature (and produces a misleading "prepared" success).
+        if not current.is_dir():
+            return direct
+        match = next((entry for entry in current.iterdir()
+                      if entry.name.casefold() == part.casefold()), None)
+        if match is None:
+            return direct
+        current = match
+    return current
+
+
+def find_asset_root(folder: Path) -> Path | None:
+    """Find the directory that must be mounted as guest /app0."""
+    candidates = [
+        folder,
+        _case_path(folder, "dvdroot_ps4"),
+        _case_path(folder, "app0"),
+        _case_path(folder, "PS4_GAME", "USRDIR", "dvdroot_ps4"),
+        _case_path(folder, "PS4_GAME", "USRDIR"),
+        _case_path(folder, "USRDIR", "dvdroot_ps4"),
+        _case_path(folder, "USRDIR"),
+    ]
+    seen, valid = set(), []
+    for order, root in enumerate(candidates):
+        try:
+            key = root.resolve()
+        except OSError:
+            key = root
+        if key in seen:
+            continue
+        seen.add(key)
+        main = root / "build/ps4/main"
+        if not main.is_dir():
+            continue
+        score = sum((main / name).is_file() for name in
+                    ("common-textures.psarc", "core-textures.psarc"))
+        score += 2 if (main / "lut0/default-color-gray.dds").is_file() else 0
+        score += 1 if (main / "boot1/coin-3d.dds").is_file() else 0
+        valid.append((score, -order, root))
+    return max(valid, default=(0, 0, None))[2]
+
+
+def validate_game_assets(folder: Path) -> Path:
+    """Locate the full game resource root and validate any PSARC archives."""
+    root = find_asset_root(folder)
+    if root is None:
+        checked = ("build/ps4/main", "dvdroot_ps4/build/ps4/main", "app0/build/ps4/main",
+                   "PS4_GAME/USRDIR/dvdroot_ps4/build/ps4/main", "USRDIR/dvdroot_ps4/build/ps4/main")
+        raise PortError(
+            "Executável TLOU encontrado, mas a raiz de recursos do jogo não foi localizada. "
+            "O runtime precisa de build/ps4/main diretamente em /app0; verifique se o PKG "
+            "foi extraído por completo. Caminhos verificados: " + ", ".join(checked))
+    main = root / "build/ps4/main"
+    archives = 0
+    for archive in main.iterdir():
+        if not archive.is_file() or not archive.name.casefold().endswith(".psarc"):
+            continue
         with archive.open("rb") as data:
             header = data.read(32)
         size = archive.stat().st_size
@@ -122,25 +156,43 @@ def validate_game_assets(folder: Path) -> None:
             toc_size < 32 + entry_size * file_count or toc_size > size):
             raise PortError(f"PSARC com índice incompleto ou inconsistente: {archive.name}. Reextraia o PKG.")
         archives += 1
-    if not archives:
-        print("Aviso: nenhum PSARC na raiz; recursos podem estar extraídos. Não é prova de instalação íntegra.", flush=True)
+    missing = [name for name in ("common-textures.psarc", "core-textures.psarc")
+               if not (main / name).is_file()]
+    if missing:
+        loose_markers = int((main / "boot1/coin-3d.dds").is_file()) + int(
+            (main / "lut0/default-color-gray.dds").is_file())
+        if not archives and not loose_markers:
+            raise PortError(
+                f"A raiz /app0/build/ps4/main foi encontrada em {root}, mas os PSARC comuns "
+                "e os recursos LUT/boot1 estão ausentes. A instalação parece conter apenas "
+                "os arquivos de boot; o jogo não pode renderizar sem os recursos completos.")
+        print("Aviso: PSARC(s) ausente(s): " + ", ".join(missing) +
+              "; mantendo recursos soltos verificados.", flush=True)
+    print(f"Runtime /app0 resource root: {root} ({archives} PSARC archive(s))", flush=True)
+    return root
 
 
 def _link_file(source: Path, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.is_symlink() or dest.is_file():
         dest.unlink()
-    # App-private storage can hold symlinks; shared game storage stays read-only.
     dest.symlink_to(source.resolve())
 
 
-def build_view(game: Path, update: Path | None, out: Path) -> Path:
-    """Boot overlay with explicit update precedence and no copying huge assets.
+def _link_entry(source: Path, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.is_symlink() or dest.is_file():
+        dest.unlink()
+    elif dest.is_dir():
+        shutil.rmtree(dest)
+    dest.symlink_to(source.resolve(), target_is_directory=source.is_dir())
 
-    The base dvdroot_ps4 is a symlink. Content updates to dvdroot_ps4 must be
-    supported by the native app0 overlay before they can be enabled, so reject
-    them instead of silently launching with the wrong resources.
-    """
+
+def build_view(game: Path, update: Path | None, out: Path) -> Path:
+    """Build a read-only app0 view and flatten dvdroot/app0 resources to /app0."""
+    asset_root = find_asset_root(game)
+    if asset_root is None:
+        raise PortError("Não é possível montar /app0: build/ps4/main não foi localizado.")
     view = out / "tlou-view"
     if view.exists() or view.is_symlink():
         if view.is_symlink() or view.is_file():
@@ -148,12 +200,26 @@ def build_view(game: Path, update: Path | None, out: Path) -> Path:
         else:
             shutil.rmtree(view)
     view.mkdir(parents=True)
-    # Keep non-boot resources in place; do not duplicate their potentially huge contents.
+    asset_rel = None
+    if asset_root != game:
+        try:
+            asset_rel = asset_root.relative_to(game)
+        except ValueError:
+            asset_rel = None
+    skip_top = asset_rel.parts[0] if asset_rel and asset_rel.parts else None
     for entry in game.iterdir():
-        if entry.name.lower() not in {"eboot.bin", "sce_sys", "sce_module"}:
-            target = view / entry.name
-            if entry.is_dir() or entry.is_file():
-                target.symlink_to(entry.resolve(), target_is_directory=entry.is_dir())
+        if entry.name.lower() in {"eboot.bin", "sce_sys", "sce_module"}:
+            continue
+        if skip_top and entry.name == skip_top:
+            continue
+        if entry.is_dir() or entry.is_file():
+            _link_entry(entry, view / entry.name)
+    if asset_root != game:
+        for entry in asset_root.iterdir():
+            if entry.name.lower() in {"eboot.bin", "sce_sys", "sce_module"}:
+                continue
+            _link_entry(entry, view / entry.name)
+        print(f"/app0 resource tree flattened from {asset_root}", flush=True)
     for layer in filter(None, (game, update)):
         for name in ("eboot.bin", "sce_sys", "sce_module"):
             entry = layer / name

@@ -35,6 +35,10 @@ def make_game(root, *, title="CUSA00552", ver="01.11", include_libc=True):
     content = root / "dvdroot_ps4/build/ps4/main"
     content.mkdir(parents=True)
     (content / "boot.txt").write_text("unpacked resources fixture")
+    (content / "boot1").mkdir()
+    (content / "boot1/coin-3d.dds").write_bytes(b"coin")
+    (content / "lut0").mkdir()
+    (content / "lut0/default-color-gray.dds").write_bytes(b"lut")
     if include_libc:
         (root / "sce_module").mkdir(exist_ok=True)
         (root / "sce_module/libc.prx").write_bytes(b"libc")
@@ -105,6 +109,34 @@ class TestTLOUBionic(unittest.TestCase):
             m.validate_game_assets(valid)
             self.assertEqual(m.require_game(valid)["TITLE_ID"], "CUSA00552")
 
+    def test_content_roots_are_flattened_to_app0(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            game = make_game(root/"game")
+            view = m.build_view(game, None, root/"out")
+            self.assertTrue((view/"build/ps4/main/boot.txt").is_symlink())
+            self.assertTrue((view/"build/ps4/main/boot1/coin-3d.dds").is_symlink())
+            self.assertFalse((view/"dvdroot_ps4").exists())
+
+    def test_flat_app0_root_is_supported_without_dvdroot_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            game = make_game(root/"game")
+            import shutil
+            shutil.copytree(game/"dvdroot_ps4/build", game/"build")
+            shutil.rmtree(game/"dvdroot_ps4")
+            self.assertEqual(m.validate_game_assets(game), game)
+            view = m.build_view(game, None, root/"out")
+            self.assertTrue((view/"build/ps4/main/boot.txt").is_symlink())
+
+    def test_missing_resource_root_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game = make_game(Path(tmp)/"game")
+            import shutil
+            shutil.rmtree(game/"dvdroot_ps4")
+            with self.assertRaisesRegex(m.PortError, "raiz de recursos do jogo não foi localizada"):
+                m.validate_game_assets(game)
+
     def test_update_overlay_never_mutates_game(self):
         with tempfile.TemporaryDirectory() as tmp:
             t = Path(tmp)
@@ -119,7 +151,9 @@ class TestTLOUBionic(unittest.TestCase):
             self.assertEqual((view/"dvdroot_ps4/resource.bin").read_bytes(), b"resource")
             self.assertEqual((base/"eboot.bin").read_bytes(), b"test game")
             self.assertTrue((view/"eboot.bin").is_symlink())
-            self.assertTrue((view/"dvdroot_ps4").is_symlink())
+            self.assertFalse((view/"dvdroot_ps4").exists())
+            self.assertTrue((view/"build/ps4/main/boot.txt").is_symlink())
+            self.assertTrue((view/"build/ps4/main/lut0/default-color-gray.dds").is_symlink())
 
     def test_invalid_sfo_and_missing_libc(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -25,6 +25,7 @@ class DevicePreparation(unittest.TestCase):
             root = Path(tmp)
             game = make_game(root / "CUSA00552", ver="01.00")
             import shutil
+            shutil.copytree(game / "dvdroot_ps4/build", game / "build")
             shutil.rmtree(game / "dvdroot_ps4")
             out = root / "private/prepared"
             with patch.object(device, "prepare", side_effect=self.fake_prepare) as prepare, \

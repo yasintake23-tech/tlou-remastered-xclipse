@@ -9,20 +9,34 @@ import tempfile
 from tlou_bionic import prepare, require_game
 from tlou_patches import write_selected
 
-REVISION = 2
+REVISION = 3
 
 
 def fingerprint(game):
     require_game(game)
+    from tlou_bionic import validate_game_assets
+    asset_root = validate_game_assets(game)
     digest = hashlib.sha256()
-    digest.update(f"{REVISION}:{game.resolve()}".encode())
+    digest.update(f"{REVISION}:{game.resolve()}:{asset_root.resolve()}".encode())
     paths = [game / "eboot.bin", game / "sce_sys/param.sfo"]
     paths += sorted((game / "sce_module").rglob("*.prx"))
+    main = asset_root / "build/ps4/main"
+    resource_paths = [main / "common-textures.psarc", main / "core-textures.psarc",
+                      main / "lut0/default-color-gray.dds", main / "boot1/coin-3d.dds"]
+    resource_paths += sorted(p for p in main.iterdir() if p.is_file() and
+                             p.name.casefold().endswith(".psarc"))
     for path in paths:
         digest.update(str(path.relative_to(game)).encode())
         with path.open("rb") as stream:
             for block in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(block)
+    for path in sorted(set(resource_paths)):
+        digest.update(str(path.relative_to(asset_root)).encode())
+        if path.is_file():
+            stat = path.stat()
+            digest.update(f"{stat.st_size}:{stat.st_mtime_ns}".encode())
+        else:
+            digest.update(b"missing")
     return digest.hexdigest()
 
 
@@ -58,8 +72,11 @@ def ensure(source, game, out, options=None):
         if options is not None:
             write_selected(source, stage, options)
         metadata = require_game(game)
+        from tlou_bionic import validate_game_assets
+        asset_root = validate_game_assets(game)
         (stage / "device-ready.json").write_text(json.dumps({"fingerprint": key, "game": str(game),
-            "title_id": metadata.get("TITLE_ID"), "version": metadata.get("APP_VER")}))
+            "asset_root": str(asset_root), "title_id": metadata.get("TITLE_ID"),
+            "version": metadata.get("APP_VER")}))
         if backup.exists():
             shutil.rmtree(backup)
         if out.exists():
