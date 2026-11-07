@@ -18,10 +18,18 @@ final class PortSettings {
     }
 
     static boolean isXclipse540() {
-        final String model=Build.MODEL==null?"":Build.MODEL.toUpperCase(Locale.ROOT);
+        final String model=Build.MODEL==null?"":Build.MODEL;
         final String soc=Build.VERSION.SDK_INT>=31 && Build.SOC_MODEL!=null
-            ?Build.SOC_MODEL.toUpperCase(Locale.ROOT):"";
-        return model.equals("SM-A566B") || soc.contains("EXYNOS 1580") || soc.contains("S5E8855");
+            ?Build.SOC_MODEL:"";
+        return isXclipse540(model,soc);
+    }
+
+    // Kept pure so every supported A56/Exynos identifier can be regression-tested.
+    static boolean isXclipse540(String model,String soc) {
+        final String normalizedModel=model==null?"":model.toUpperCase(Locale.ROOT);
+        final String normalizedSoc=soc==null?"":soc.toUpperCase(Locale.ROOT);
+        return normalizedModel.equals("SM-A566B") ||
+            normalizedSoc.contains("EXYNOS 1580") || normalizedSoc.contains("S5E8855");
     }
 
     // Existing player-selected game, driver, patch and resolution preferences survive upgrades.
