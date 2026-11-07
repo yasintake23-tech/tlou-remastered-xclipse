@@ -3,6 +3,7 @@
 // gow3: see vk_swapchain_ahb.h.
 #ifdef __ANDROID__
 #include <android/hardware_buffer.h>
+#include <dlfcn.h>
 #include <poll.h>
 #include <unistd.h>
 #include <array>
@@ -48,8 +49,13 @@ bool CheckSamsungGrallocLinear(const AHardwareBuffer* ahb, u32& out_layout, u32&
     if (!ahb) {
         return false;
     }
-    const auto* raw =
-        reinterpret_cast<const NativeHandleHeader*>(AHardwareBuffer_getNativeHandle(ahb));
+    using GetNativeHandleFn = const NativeHandleHeader* (*)(const AHardwareBuffer*);
+    static const auto get_native_handle = reinterpret_cast<GetNativeHandleFn>(
+        dlsym(RTLD_DEFAULT, "AHardwareBuffer_getNativeHandle"));
+    if (!get_native_handle) {
+        return true;
+    }
+    const auto* raw = get_native_handle(ahb);
     if (!raw || raw->num_fds < 0 || raw->num_ints < 0 || (raw->num_fds + raw->num_ints) < 51) {
         return true;
     }
