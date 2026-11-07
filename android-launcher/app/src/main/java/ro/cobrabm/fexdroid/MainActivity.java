@@ -176,7 +176,7 @@ public final class MainActivity extends Activity {
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
         TextView brand=text("DAEDALUS  /  ANDROID",12,ACCENT);brand.setLetterSpacing(.14f);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
-        TextView version=text("v0.1",13,ACCENT);
+        TextView version=text("v0.2 HEX",13,ACCENT);
         version.setGravity(Gravity.RIGHT);header.addView(version,new LinearLayout.LayoutParams(dp(60),-2));
         root.addView(header);
         if(currentTab.equals("home")) {
@@ -209,6 +209,7 @@ public final class MainActivity extends Activity {
             LinearLayout game=card(root,"SEU JOGO");
             gameInfo=text("",13,TEXT);gameInfo.setMaxLines(3);game.addView(gameInfo);
             add(game,"JOGAR",true,()->withAccess(()->prepareSelected(true)));
+            add(game,"HEX Ayarları",false,()->startActivity(new Intent(this,HexSettingsActivity.class)));
             game.addView(text("PKG ou pasta extraída. Preparação automática no celular.",12,MUTED));
             add(game,"Escolher pasta do jogo",false,()->withAccess(()->pickFolder(PICK_GAME)));
             add(game,"Instalar por PKG",false,()->withAccess(()->pickFile(PICK_PKG)));
