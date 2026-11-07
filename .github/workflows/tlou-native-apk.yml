@@ -2,7 +2,7 @@ name: TLOU Bionic Full Native and APK
 
 on:
   push:
-    branches: [android-bionic-stage1, tlou-ui-approval-log32-20261105, xclipse/enable-bc-textures]
+    branches: [android-bionic-stage1, tlou-ui-approval-log32-20261105, xclipse/enable-bc-textures, xclipse/exynos1580-v05]
     paths:
       - 'android/**'
       - 'android-launcher/**'
@@ -176,15 +176,15 @@ jobs:
         run: bash android/bionic/package_apk.sh
       - name: Verify APK payload and native dependency closure
         if: ${{ !contains(github.event.head_commit.message, '[native-only]') }}
-        run: python3 android/bionic/check_tools_apk.py out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk
+        run: python3 android/bionic/check_tools_apk.py out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk
       - name: Publish installable TLOU APK
         if: ${{ !contains(github.event.head_commit.message, '[native-only]') }}
         uses: actions/upload-artifact@v4
         with:
-          name: TheLastOfUsRemastered-Android-v0.1-arm64
+          name: TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64
           path: |
-            out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk
-            out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk.sha256
+            out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk
+            out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk.sha256
           if-no-files-found: error
       - name: Publish built native binaries
         uses: actions/upload-artifact@v4
@@ -244,7 +244,7 @@ jobs:
       - name: Download exact successful v0.1 APK
         uses: actions/download-artifact@v4
         with:
-          name: TheLastOfUsRemastered-Android-v0.1-arm64
+          name: TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64
           path: out/source-apk
           github-token: ${{ github.token }}
           run-id: 42136621594
@@ -262,7 +262,7 @@ jobs:
           gradle -p android-launcher :app:assembleRelease --no-daemon --max-workers=2
           sdk_tools="$ANDROID_HOME/build-tools/35.0.0"
           mkdir -p out/release
-          apk=out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk
+          apk=out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk
           "$sdk_tools/zipalign" -f -p 4 android-launcher/app/build/outputs/apk/release/app-release-unsigned.apk out/aligned.apk
           "$sdk_tools/apksigner" sign --ks out/android-bionic/experimental-development.jks --ks-key-alias tlou-bionic --ks-pass pass:TLOU-Bionic-development --key-pass pass:TLOU-Bionic-development --out "$apk" out/aligned.apk
           "$sdk_tools/apksigner" verify --verbose "$apk"
@@ -273,14 +273,14 @@ jobs:
           sha256sum "$apk" > "$apk.sha256"
       - name: Validate final APK and byte-identical native payload
         run: |
-          python3 android/bionic/check_tools_apk.py out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk
+          python3 android/bionic/check_tools_apk.py out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk
           python3 - <<'PYCODE'
           import zipfile
           from pathlib import Path
           import importlib.util
           spec=importlib.util.spec_from_file_location('reuse','android/bionic/reuse_apk.py')
           reuse=importlib.util.module_from_spec(spec);spec.loader.exec_module(reuse)
-          with zipfile.ZipFile('out/source-apk/TheLastOfUsRemastered-Android-v0.1-arm64.apk') as old, zipfile.ZipFile('out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk') as new:
+          with zipfile.ZipFile('out/source-apk/TheLastOfUsRemastered-Android-v0.1-arm64.apk') as old, zipfile.ZipFile('out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk') as new:
               names=[n for n in old.namelist() if reuse.payload(n) is not None and not n.endswith('/')]
               assert names
               for n in names:
@@ -295,7 +295,7 @@ jobs:
           PYCODE
       - uses: actions/upload-artifact@v4
         with:
-          name: TheLastOfUsRemastered-Android-v0.1-arm64
+          name: TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64
           path: out/release/*
           if-no-files-found: error
       - name: Save UI tests and diagnostics
