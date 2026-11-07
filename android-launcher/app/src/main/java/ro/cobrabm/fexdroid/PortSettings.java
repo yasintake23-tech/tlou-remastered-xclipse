@@ -37,17 +37,16 @@ final class PortSettings {
             "compute_wait_fast","relaxed_skinning_fp"}) edit.remove(key);
         SharedPreferences current=prefs(context);
         if (isXclipse540()) {
-            // This phone's first test log showed that the saved performance preset
-            // had disabled the game's skin subsurface pass. Restore only that effect;
-            // retain every other graphics choice and the selected resolution.
-            if (!current.getBoolean("xclipse540_skin_lighting_v1",false)) {
-                edit.putBoolean("subsurface",false);
-                edit.putBoolean("xclipse540_skin_lighting_v1",true);
+            // v0.2 HEX stability migration: v0.1 enabled a speculative draw-prep
+            // worker and changed the skin effect without a matched A/B result.
+            // Restore the previous stable choices once; keep all unrelated settings.
+            if (current.getBoolean("xclipse540_skin_lighting_v1",false) &&
+                !current.getBoolean("hex_stability_migration_v2",false)) {
+                edit.putBoolean("subsurface",true);
+                edit.putString("draw_prep_workers","0");
+                edit.putBoolean("hex_stability_migration_v2",true);
             }
-            // Start with one low-priority draw-preparation worker on Xclipse 540.
-            // This is an A/B candidate, not a claimed FPS fix; the in-game menu
-            // lets the player compare Off / 1 / 2 workers.
-            if (!current.contains("draw_prep_workers")) edit.putString("draw_prep_workers","1");
+            if (!current.contains("draw_prep_workers")) edit.putString("draw_prep_workers","0");
         }
         String limit=current.getString("fps_limit","60");
         if(!"30".equals(limit) && !"60".equals(limit))edit.putString("fps_limit","60");
@@ -192,7 +191,7 @@ final class PortSettings {
         env.put("GOW3_CPU_TRIMS","1");
         env.put("GOW3_PREFETCH_PIPELINES","1");
         env.put("GOW3_PARALLEL_PIPELINES","1");
-        String workers=p.getString("draw_prep_workers",isXclipse540()?"1":"0");
+        String workers=p.getString("draw_prep_workers","0");
         if (!"0".equals(workers) && !"1".equals(workers) && !"2".equals(workers)) workers="0";
         env.put("GOW3_PREP_WORKERS",workers);
         env.put("GOW3_DEFERRED_READBACK","0");
