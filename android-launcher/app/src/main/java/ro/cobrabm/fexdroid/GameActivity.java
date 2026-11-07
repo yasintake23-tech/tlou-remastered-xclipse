@@ -59,6 +59,7 @@ public final class GameActivity extends Activity {
     private volatile boolean started;
     private boolean resumed;
     private final FpsMeter fpsMeter=new FpsMeter();
+    private long lastPresentDiagnosticsMs;
     private HudTelemetry hudTelemetry;
     private final GpuTurboSession gpuTurbo=new GpuTurboSession();
     private Boolean lastTurboChoice;
@@ -203,6 +204,11 @@ public final class GameActivity extends Activity {
                 double gpu=hudTelemetry==null?Double.NaN:hudTelemetry.gpuPercent();
                 status.setText(HudPresentation.text(mode,fps,gpu,cpu,
                     p.getBoolean("hud_gpu",true),p.getBoolean("hud_cpu",true)));
+                long diagnosticsNow=SystemClock.elapsedRealtime();
+                if(diagnosticsNow-lastPresentDiagnosticsMs>=5000L) {
+                    lastPresentDiagnosticsMs=diagnosticsNow;
+                    RunLog.write(this,"Android presentation: "+Gow3Present.diagnostics());
+                }
             } else {
                 fpsMeter.reset();
                 if(hudTelemetry!=null)hudTelemetry.reset();
@@ -232,6 +238,13 @@ public final class GameActivity extends Activity {
     private void launch() {
         SaveArchive.Guard saveGuard=null;
         try {
+            RunLog.write(this,"Android görüntü sunum katmanı bekleniyor...");
+            if (!Gow3Present.awaitSurface(12000L)) {
+                String diagnostic = Gow3Present.diagnostics();
+                RunLog.write(this,"Sunum yüzeyi hazır değil; siyah ekranlı başlatma engellendi: "+diagnostic);
+                throw new IllegalStateException("Android görüntü yüzeyi 12 saniye içinde hazırlanamadı. "+diagnostic);
+            }
+            RunLog.write(this,"Android SurfaceControl hazır: "+Gow3Present.diagnostics());
             RunLog.write(this,"Instalando executável Bionic do APK");
             File bin=installBinary();
             RunLog.write(this,"Loader: "+bin+" • "+bin.length()+" bytes • executável="+bin.canExecute());

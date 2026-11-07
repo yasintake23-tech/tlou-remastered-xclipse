@@ -3,6 +3,8 @@ package ro.cobrabm.fexdroid;
 
 import android.view.Surface;
 import android.view.SurfaceHolder;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The Bionic game process's frame path (tools/android/present/gow3_present_proto.h): libgow3present.so
@@ -14,6 +16,8 @@ public final class Gow3Present {
     static { System.loadLibrary("gow3present"); }
     private static native String nativeStart(String socketPath);
     private static native void nativeSetSurface(Surface surface);
+    private static native boolean nativeSurfaceReady();
+    private static native String nativeDiagnostics();
     private static native long nativeFrames();
     private static native void nativeSetFullscreen(boolean enabled);
     private static native void nativeShutdown();
@@ -27,6 +31,25 @@ public final class Gow3Present {
 
     private static SurfaceHolder.Callback callback;
     private static SurfaceHolder attached;
+    private static volatile CountDownLatch initialSurfaceReady = new CountDownLatch(1);
+
+    private static void attachSurface(Surface surface) {
+        if (surface == null || !surface.isValid()) return;
+        setSurface(surface);
+        if (nativeSurfaceReady()) initialSurfaceReady.countDown();
+    }
+
+    /** Wait off the UI thread until the actual Android presentation layer exists. */
+    public static boolean awaitSurface(long timeoutMs) throws InterruptedException {
+        if (nativeSurfaceReady()) return true;
+        CountDownLatch latch = initialSurfaceReady;
+        return latch.await(Math.max(0L, timeoutMs), TimeUnit.MILLISECONDS) && nativeSurfaceReady();
+    }
+
+    public static String diagnostics() {
+        try { return nativeDiagnostics(); }
+        catch (Throwable e) { return "presentation diagnostics unavailable: " + e; }
+    }
 
     /** Listens on socketPath (once) and shows the game on this surface until it is destroyed. */
     public static synchronized String start(SurfaceHolder holder, String socketPath) {
@@ -34,20 +57,22 @@ public final class Gow3Present {
     }
 
     public static synchronized String start(SurfaceHolder holder, String socketPath, boolean fullscreen) {
+        initialSurfaceReady = new CountDownLatch(1);
         nativeSetFullscreen(fullscreen);
         String result = nativeStart(socketPath);
-        used = true;
         if (!result.equals("present running")) return result;
+        used = true;
         if (attached != null && callback != null) attached.removeCallback(callback);
         attached = holder;
         callback = new SurfaceHolder.Callback() {
-            @Override public void surfaceCreated(SurfaceHolder h) { setSurface(h.getSurface()); }
-            @Override public void surfaceChanged(SurfaceHolder h, int format, int w, int height) {}
-            // The game keeps running: its frames are dropped until a surface is back.
+            @Override public void surfaceCreated(SurfaceHolder h) { attachSurface(h.getSurface()); }
+            @Override public void surfaceChanged(SurfaceHolder h, int format, int w, int height) {
+                if (!nativeSurfaceReady()) attachSurface(h.getSurface());
+            }
             @Override public void surfaceDestroyed(SurfaceHolder h) { setSurface(null); }
         };
         holder.addCallback(callback);
-        setSurface(holder.getSurface().isValid() ? holder.getSurface() : null);
+        attachSurface(holder.getSurface());
         return "bridge running: bionic present on " + socketPath;
     }
 

@@ -123,16 +123,21 @@ static struct {
     void (*set_on_complete)(ASurfaceTransaction*, void*, void (*)(void*, ASurfaceTransactionStats*));
     void (*set_on_commit)(ASurfaceTransaction*, void*, void (*)(void*, ASurfaceTransactionStats*)); /* API 31, optional */
     int (*prev_release_fence)(ASurfaceTransactionStats*, ASurfaceControl*);
+    int (*get_present_fence)(ASurfaceTransactionStats*);
     void (*get_controls)(ASurfaceTransactionStats*, ASurfaceControl***, size_t*);
     void (*release_controls)(ASurfaceControl**);
+    const char* missing_symbol;
     int ok;
 } api;
 
 static void load_api(void) {
     void* lib = dlopen("libandroid.so", RTLD_NOW);
-    if (!lib) return;
+    if (!lib) { api.missing_symbol = "libandroid.so"; return; }
     *(void**)&api.set_on_commit = dlsym(lib, "ASurfaceTransaction_setOnCommit"); /* optional */
-#define SYM(field, name) if (!(*(void**)&api.field = dlsym(lib, name))) return
+#define SYM(field, name) do { \
+    *(void**)&api.field = dlsym(lib, name); \
+    if (!api.field) { api.missing_symbol = name; LOGE("missing Android presentation API: %s", name); return; } \
+} while (0)
     SYM(create_from_window, "ASurfaceControl_createFromWindow");
     SYM(release, "ASurfaceControl_release");
     SYM(txn_create, "ASurfaceTransaction_create");
@@ -144,6 +149,7 @@ static void load_api(void) {
     SYM(set_transparency, "ASurfaceTransaction_setBufferTransparency");
     SYM(set_on_complete, "ASurfaceTransaction_setOnComplete");
     SYM(prev_release_fence, "ASurfaceTransactionStats_getPreviousReleaseFenceFd");
+    SYM(get_present_fence, "ASurfaceTransactionStats_getPresentFenceFd");
     SYM(get_controls, "ASurfaceTransactionStats_getASurfaceControls");
     SYM(release_controls, "ASurfaceTransactionStats_releaseASurfaceControls");
 #undef SYM
@@ -182,12 +188,22 @@ static struct {
     uint32_t generation;
     uint32_t count;
     AHardwareBuffer* bufs[GOW3_PRESENT_MAX_BUFFERS];
-    atomic_ullong frames;
+    atomic_ullong frames; /* frames received from the Vulkan client */
+    atomic_ullong frames_submitted;
+    atomic_ullong frames_presented;
+    atomic_ullong frames_released;
+    atomic_ullong frames_dropped_no_surface;
+    atomic_ullong buffers_received;
+    atomic_ullong surface_create_attempts;
+    atomic_ullong surface_create_failures;
+    atomic_ullong present_fences_available;
+    char last_surface_error[160];
 } S = {.lock = PTHREAD_MUTEX_INITIALIZER, .server_fd = -1, .conn_fd = -1, .last_set = -1, .wake_fd = -1};
 
 /* ---- lock held for everything below unless noted ---- */
 
 static void send_release(uint32_t generation, uint32_t index, uint64_t frame, int fence) {
+    atomic_fetch_add(&S.frames_released, 1);
     gow3_present_msg m = gow3_present_make(GOW3_PRESENT_RELEASE);
     m.generation = generation;
     m.index = index;
@@ -240,9 +256,18 @@ static void drop_surface_control(void) {
 
 static void make_surface_control(void) {
     if (!api.ok || !S.window || S.sc) return;
+    atomic_fetch_add(&S.surface_create_attempts, 1);
     S.sc = api.create_from_window(S.window, "gow3present");
-    if (!S.sc) LOGE("ASurfaceControl_createFromWindow failed");
-    else LOGI("surface control created");
+    if (!S.sc) {
+        atomic_fetch_add(&S.surface_create_failures, 1);
+        snprintf(S.last_surface_error, sizeof S.last_surface_error,
+                 "ASurfaceControl_createFromWindow returned null");
+        LOGE("%s", S.last_surface_error);
+    } else {
+        S.last_surface_error[0] = '\0';
+        LOGI("surface control created: %dx%d", ANativeWindow_getWidth(S.window),
+             ANativeWindow_getHeight(S.window));
+    }
 }
 
 typedef struct {
@@ -282,6 +307,12 @@ static void on_complete(void* ctx_, ASurfaceTransactionStats* stats) {
     if (ctx->gates && S.fifo && ctx->session == S.session && ctx->seq == S.inflight) {
         S.inflight = 0;
         if (S.queue_len) wake_receiver();
+    }
+    atomic_fetch_add(&S.frames_presented, 1);
+    int present_fence = api.get_present_fence ? api.get_present_fence(stats) : -1;
+    if (present_fence >= 0) {
+        atomic_fetch_add(&S.present_fences_available, 1);
+        close(present_fence);
     }
     pthread_mutex_unlock(&S.lock);
     free(ctx);
@@ -350,6 +381,7 @@ static void show_frame(uint32_t generation, uint32_t index, uint64_t frame, uint
     if (commit) api.set_on_commit(t, commit, on_commit);
     api.txn_apply(t);
     api.txn_delete(t);
+    atomic_fetch_add(&S.frames_submitted, 1);
     S.last_set = (int)index;
     if (S.fifo) S.inflight = ctx->seq;
 }
@@ -425,6 +457,7 @@ static void present_frame(const gow3_present_msg* m, int acquire_fd) {
     }
     atomic_fetch_add(&S.frames, 1);
     if (!S.sc || !api.ok) {
+        atomic_fetch_add(&S.frames_dropped_no_surface, 1);
         /* No display now (surface lost, app paused): the frame is dropped; its own acquire fence
          * is the release (the game's writes are what the buffer still waits for). */
         send_release(m->generation, m->index, m->frame, acquire_fd);
@@ -538,6 +571,7 @@ static void serve(int fd) {
             if (m.generation == S.generation && m.index < S.count) {
                 if (S.bufs[m.index]) AHardwareBuffer_release(S.bufs[m.index]);
                 S.bufs[m.index] = b;
+                atomic_fetch_add(&S.buffers_received, 1);
             } else {
                 AHardwareBuffer_release(b);
             }
@@ -597,6 +631,13 @@ JNIEXPORT jstring JNICALL Java_ro_cobrabm_fexdroid_Gow3Present_nativeStart(JNIEn
     pthread_mutex_lock(&S.lock);
     if (!S.started) {
         load_api();
+        if (!api.ok) {
+            snprintf(msg, sizeof msg, "Android SurfaceControl API unavailable: missing %s",
+                     api.missing_symbol ? api.missing_symbol : "unknown symbol");
+            goto fail;
+        }
+        LOGI("Android SurfaceControl API ready (ASurfaceTransaction_setOnCommit %s)",
+             api.set_on_commit ? "available" : "unavailable");
         if (S.wake_fd < 0) /* kept for the life of the process: the receive thread may still poll it */
             S.wake_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
         if (S.wake_fd < 0) {
@@ -642,14 +683,61 @@ JNIEXPORT void JNICALL Java_ro_cobrabm_fexdroid_Gow3Present_nativeSetSurface(JNI
     if (S.window) { ANativeWindow_release(S.window); S.window = NULL; }
     if (surface) {
         S.window = ANativeWindow_fromSurface(env, surface);
-        make_surface_control();
+        if (!S.window) {
+            snprintf(S.last_surface_error, sizeof S.last_surface_error,
+                     "ANativeWindow_fromSurface returned null");
+            LOGE("%s", S.last_surface_error);
+        } else {
+            LOGI("Android window attached: %dx%d", ANativeWindow_getWidth(S.window),
+                 ANativeWindow_getHeight(S.window));
+            make_surface_control();
+        }
+    } else {
+        LOGI("Android window detached; presentation paused");
     }
     pthread_mutex_unlock(&S.lock);
 }
 
+JNIEXPORT jboolean JNICALL Java_ro_cobrabm_fexdroid_Gow3Present_nativeSurfaceReady(
+        JNIEnv* env, jclass cls) {
+    (void)env; (void)cls;
+    pthread_mutex_lock(&S.lock);
+    const int ready = api.ok && S.window != NULL && S.sc != NULL;
+    pthread_mutex_unlock(&S.lock);
+    return ready ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jstring JNICALL Java_ro_cobrabm_fexdroid_Gow3Present_nativeDiagnostics(
+        JNIEnv* env, jclass cls) {
+    (void)cls;
+    char message[768];
+    pthread_mutex_lock(&S.lock);
+    const int width = S.window ? ANativeWindow_getWidth(S.window) : 0;
+    const int height = S.window ? ANativeWindow_getHeight(S.window) : 0;
+    snprintf(message, sizeof message,
+        "api=%d missing=%s window=%d surface_control=%d size=%dx%d connected=%d buffers=%u "
+        "received=%llu submitted=%llu presented=%llu released=%llu dropped_no_surface=%llu "
+        "buffer_rx=%llu surface_create=%llu surface_fail=%llu present_fences=%llu last_error=%s",
+        api.ok, api.missing_symbol ? api.missing_symbol : "none", S.window != NULL, S.sc != NULL,
+        width, height, S.conn_fd >= 0, S.count,
+        (unsigned long long)atomic_load(&S.frames),
+        (unsigned long long)atomic_load(&S.frames_submitted),
+        (unsigned long long)atomic_load(&S.frames_presented),
+        (unsigned long long)atomic_load(&S.frames_released),
+        (unsigned long long)atomic_load(&S.frames_dropped_no_surface),
+        (unsigned long long)atomic_load(&S.buffers_received),
+        (unsigned long long)atomic_load(&S.surface_create_attempts),
+        (unsigned long long)atomic_load(&S.surface_create_failures),
+        (unsigned long long)atomic_load(&S.present_fences_available),
+        S.last_surface_error[0] ? S.last_surface_error : "none");
+    pthread_mutex_unlock(&S.lock);
+    return (*env)->NewStringUTF(env, message);
+}
+
 JNIEXPORT jlong JNICALL Java_ro_cobrabm_fexdroid_Gow3Present_nativeFrames(JNIEnv* env, jclass cls) {
     (void)env; (void)cls;
-    return (jlong)atomic_load(&S.frames);
+    /* HUD FPS is the number of transactions confirmed presented by SurfaceFlinger. */
+    return (jlong)atomic_load(&S.frames_presented);
 }
 
 JNIEXPORT void JNICALL Java_ro_cobrabm_fexdroid_Gow3Present_nativeShutdown(JNIEnv* env, jclass cls) {
