@@ -489,10 +489,11 @@ public:
         return features.logicOp;
     }
 
-    /// Returns whether VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT is supported on compressed
-    /// images.
-    bool IsBlockTexelViewSupported() const {
-        return supports_block_texel_view;
+    /// Returns whether VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT is supported
+    /// for this exact compressed format. The capability is not assumed to be shared by all BCn.
+    bool IsBlockTexelViewSupported(vk::Format format) const {
+        const auto it = block_texel_view_formats.find(format);
+        return it != block_texel_view_formats.end() && it->second;
     }
 
     /// Returns whether VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT is supported on 3D images
@@ -614,7 +615,7 @@ private:
     bool compute_shader_derivatives{};
     bool mixed_float_dot_product{}; // gow3: VK_VALVE_shader_mixed_float_dot_product (FSR 4.1.1)
     bool supports_memory_budget{};
-    bool supports_block_texel_view{};
+    std::unordered_map<vk::Format, bool> block_texel_view_formats;
     u64 total_memory_budget{};
     std::vector<size_t> valid_heaps;
 };

@@ -650,7 +650,7 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
             flags |= vk::ImageCreateFlagBits::e2DViewCompatibleEXT;
         }
     }
-    if (info.props.is_block && instance.IsBlockTexelViewSupported()) {
+    if (info.props.is_block && instance.IsBlockTexelViewSupported(info.pixel_format)) {
         flags |= vk::ImageCreateFlagBits::eBlockTexelViewCompatible;
     }
 
@@ -674,19 +674,24 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
     };
     auto image_format_properties =
         instance.GetPhysicalDevice().getImageFormatProperties2(format_info);
-    // gow3: storage usage is speculative (see ImageUsageFlags). Drivers that refuse it for a
-    // format (AMD's Windows driver for BC6H) get the image without it: creating the unsupported
-    // combination anyway loses the device a few frames later.
+    // Storage is speculative for compressed images: it may be used through an uncompressed view,
+    // but it is not required to sample/copy the native BC image. Retry without it first.
     if (image_format_properties.result == vk::Result::eErrorFormatNotSupported &&
-        (usage_flags & vk::ImageUsageFlagBits::eStorage)) {
-        format_info.usage = usage_flags & ~vk::ImageUsageFlagBits::eStorage;
+        (format_info.usage & vk::ImageUsageFlagBits::eStorage)) {
+        format_info.usage &= ~vk::ImageUsageFlagBits::eStorage;
         image_format_properties = instance.GetPhysicalDevice().getImageFormatProperties2(format_info);
-        if (image_format_properties.result == vk::Result::eSuccess) {
-            usage_flags = format_info.usage;
-            format_features = FormatFeatureFlags(usage_flags);
-        } else {
-            format_info.usage = usage_flags;
-        }
+    }
+    // If this driver rejects the block-view flag for the exact format, preserve native compressed
+    // sampling and retry with ordinary mutable-format usage instead of passing an invalid create.
+    if (image_format_properties.result == vk::Result::eErrorFormatNotSupported &&
+        (format_info.flags & vk::ImageCreateFlagBits::eBlockTexelViewCompatible)) {
+        format_info.flags &= ~vk::ImageCreateFlagBits::eBlockTexelViewCompatible;
+        image_format_properties = instance.GetPhysicalDevice().getImageFormatProperties2(format_info);
+    }
+    if (image_format_properties.result == vk::Result::eSuccess) {
+        usage_flags = format_info.usage;
+        flags = format_info.flags;
+        format_features = FormatFeatureFlags(usage_flags);
     }
     if (image_format_properties.result == vk::Result::eErrorFormatNotSupported) {
         LOG_ERROR(Render_Vulkan, "image format {} type {} is not supported (flags {}, usage {})",

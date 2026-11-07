@@ -1104,19 +1104,35 @@ void Instance::CollectPhysicalMemoryInfo() {
 }
 
 void Instance::CollectImageFormatInfo() {
-    // Check for block texel view support using basic image format info.
-    const vk::PhysicalDeviceImageFormatInfo2 block_texel_view_info{
-        .format = vk::Format::eBc1RgbaUnormBlock,
-        .type = vk::ImageType::e2D,
-        .tiling = vk::ImageTiling::eOptimal,
-        .usage = vk::ImageUsageFlagBits::eSampled,
-        .flags = vk::ImageCreateFlagBits::eBlockTexelViewCompatible,
+    // VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT is format-specific. A successful
+    // BC1 probe does not prove BC4/BC6H/BC7 can use the same image-create flags.
+    constexpr vk::Format block_formats[] = {
+        vk::Format::eBc1RgbUnormBlock, vk::Format::eBc1RgbSrgbBlock,
+        vk::Format::eBc1RgbaUnormBlock, vk::Format::eBc1RgbaSrgbBlock,
+        vk::Format::eBc2UnormBlock, vk::Format::eBc2SrgbBlock,
+        vk::Format::eBc3UnormBlock, vk::Format::eBc3SrgbBlock,
+        vk::Format::eBc4UnormBlock, vk::Format::eBc4SnormBlock,
+        vk::Format::eBc5UnormBlock, vk::Format::eBc5SnormBlock,
+        vk::Format::eBc6HUfloatBlock, vk::Format::eBc6HSfloatBlock,
+        vk::Format::eBc7UnormBlock, vk::Format::eBc7SrgbBlock,
     };
-    const auto block_texel_view_props =
-        physical_device.getImageFormatProperties2(block_texel_view_info);
-    supports_block_texel_view = block_texel_view_props.result == vk::Result::eSuccess;
-    LOG_INFO(Render_Vulkan, "Block Texel View support: {}",
-             supports_block_texel_view ? "Yes" : "No");
+    block_texel_view_formats.clear();
+    for (const vk::Format format : block_formats) {
+        const vk::PhysicalDeviceImageFormatInfo2 info{
+            .format = format,
+            .type = vk::ImageType::e2D,
+            .tiling = vk::ImageTiling::eOptimal,
+            .usage = vk::ImageUsageFlagBits::eSampled,
+            .flags = vk::ImageCreateFlagBits::eMutableFormat |
+                     vk::ImageCreateFlagBits::eExtendedUsage |
+                     vk::ImageCreateFlagBits::eBlockTexelViewCompatible,
+        };
+        const auto props = physical_device.getImageFormatProperties2(info);
+        const bool supported = props.result == vk::Result::eSuccess;
+        block_texel_view_formats.emplace(format, supported);
+        LOG_INFO(Render_Vulkan, "Block Texel View {}: {}",
+                 vk::to_string(format), supported ? "Yes" : "No");
+    }
 
     // Check and log format support details.
     for (const auto& format : LiverpoolToVK::SurfaceFormats()) {
