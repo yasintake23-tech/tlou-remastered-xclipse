@@ -24,8 +24,9 @@ final class XclipseRadvProfile {
         // user-selected non-Xclipse custom package.
         if(!xclipse540 || !name.contains("radv") || !name.contains("xclipse")) return false;
 
-        // Official RADV Xclipse compatibility switch for black/flickering output.
-        environment.put("RADV_XCLIPSE_DCC","0");
+        // Retain native DCC (driver default is 3): forcing DCC=0 alters internal format tables
+        // and breaks color buffer tile decompression on Xclipse 540, resulting in black render output.
+        environment.remove("RADV_XCLIPSE_DCC");
         // Emits the driver's build and active-switch markers to logcat.
         environment.put("RADV_XCLIPSE_LOG","1");
         // Skip redundant full-frame swapchain clear when the game frame covers the screen.
@@ -40,7 +41,7 @@ final class XclipseRadvProfile {
     }
 
     static String describe() {
-        return "Xclipse 540 RADV profile: DCC=off (render-target compatibility), " +
+        return "Xclipse 540 RADV profile: native DCC retained, " +
             "RADV_XCLIPSE_LOG=1, PRESENT_SKIP_CLEAR=1; RC1 depth flush and compact BC conversion defaults retained.";
     }
 }

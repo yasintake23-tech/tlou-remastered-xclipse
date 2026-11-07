@@ -26,7 +26,7 @@ public class XclipseRadvProfileTest {
     @Test public void appliesOnlyVerifiedXclipseRadvCompatibilityDefaults() {
         HashMap<String,String> env=new HashMap<>();
         assertTrue(XclipseRadvProfile.apply(env,true,"RADV Xclipse 27.0.0-RC1 · Xclipse 540"));
-        assertEquals("0",env.get("RADV_XCLIPSE_DCC"));
+        assertFalse(env.containsKey("RADV_XCLIPSE_DCC"));
         assertEquals("1",env.get("RADV_XCLIPSE_LOG"));
         assertEquals("1",env.get("GOW3_PRESENT_SKIP_CLEAR"));
         assertFalse(env.containsKey("RADV_DEBUG"));
