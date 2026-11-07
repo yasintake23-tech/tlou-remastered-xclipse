@@ -21,6 +21,8 @@ final class XclipseRadvProfile {
         // Avoid render-target compression on the initial compatibility pass.
         // This is the documented RADV workaround for black/flickering/corrupt output.
         environment.put("RADV_XCLIPSE_DCC","0");
+        // Use the upstream depth-cache flush path as a correctness-first fallback.
+        environment.put("RADV_XCLIPSE_DBFLUSH","0");
 
         // Preserve higher-fidelity decoding for the BC formats seen in the device logs.
         // BC7->ASTC keeps the normal footprint/sampling rate; BC6H->RGBA16F costs more memory.

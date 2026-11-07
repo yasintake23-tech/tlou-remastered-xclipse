@@ -9,6 +9,7 @@ public class XclipseRadvProfileTest {
         HashMap<String,String> env=new HashMap<>();
         assertTrue(XclipseRadvProfile.apply(env,"Samsung Xclipse 540","RADV Xclipse 27.0.0"));
         assertEquals("0",env.get("RADV_XCLIPSE_DCC"));
+        assertEquals("0",env.get("RADV_XCLIPSE_DBFLUSH"));
         assertEquals("1",env.get("RADV_XCLIPSE_BC7_ASTC"));
         assertEquals("1",env.get("RADV_XCLIPSE_BC6H_RGBA16F"));
         assertEquals("1",env.get("MESA_GRALLOC_LINEAR"));

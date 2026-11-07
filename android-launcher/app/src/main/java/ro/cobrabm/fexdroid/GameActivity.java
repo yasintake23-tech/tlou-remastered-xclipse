@@ -316,7 +316,7 @@ public final class GameActivity extends Activity {
             String driverName=getSharedPreferences("tlou",MODE_PRIVATE).getString("driver_name","");
             if(XclipseRadvProfile.apply(env,glRenderer,driverName)) {
                 RunLog.write(this,"Xclipse RADV compatibility profile enabled for "+glRenderer+
-                    " ("+driverName+"): DCC off, BC6H RGBA16F, BC7 ASTC, linear AHB, RADV diagnostics");
+                    " ("+driverName+"): DCC off, upstream depth flush, BC6H UFLOAT RGBA16F, BC7 ASTC, linear AHB, RADV diagnostics");
             }
             builder.directory(app0);
             builder.redirectErrorStream(true);
