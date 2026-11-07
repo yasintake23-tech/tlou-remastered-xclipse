@@ -71,7 +71,7 @@ gradle -p android-launcher :app:testReleaseUnitTest :app:lintVitalRelease
 The Java tests require Android SDK setup. The final APK validation is:
 
 ```sh
-python3 android/bionic/check_tools_apk.py out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk
+python3 android/bionic/check_tools_apk.py out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk
 ```
 
 The validated executable profile is SHA-256 checked and every patch requires
