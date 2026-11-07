@@ -26,7 +26,7 @@ import java.util.concurrent.Executors;
 /** Pre-game diagnostics, Vulkan driver tests and stable profiles. Never launches the game. */
 public final class HexSettingsActivity extends Activity {
     private static final int BG=0xff101613,PANEL=0xff1b2520,TEXT=0xffe7e9df,MUTED=0xffa6b0a4,ACCENT=0xffc2cf96;
-    private static final int PICK_DRIVER=781,EXPORT_REPORT=782;
+    private static final int PICK_DRIVER=781,EXPORT_REPORT=782,EXPORT_LOGS=783;
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final List<Button> buttons=new ArrayList<>();
     private SharedPreferences prefs;
@@ -145,6 +145,7 @@ public final class HexSettingsActivity extends Activity {
         add(reports,"Son oyun loglarını analiz et",false,this::buildLogOnly);
         add(reports,"Son HEX raporunu görüntüle",false,this::showLatest);
         add(reports,"HEX raporunu dışa aktar",true,this::exportReport);
+        add(reports,"Tam log ZIP arşivini dışa aktar",false,this::exportLogs);
 
         progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         progress.setIndeterminate(true);progress.setVisibility(View.GONE);root.addView(progress);
@@ -211,6 +212,10 @@ public final class HexSettingsActivity extends Activity {
     private static String readFile(File file) {
         try{return new String(Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8);}
         catch(Exception e){return e.toString();}
+    }
+    private void exportLogs() {
+        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.setType("application/zip");i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.putExtra(Intent.EXTRA_TITLE,"TLOU-HEX-Logs.zip");startActivityForResult(i,EXPORT_LOGS);
     }
     private void exportReport() {
         File latest=new File(getFilesDir(),"tlou/hex/latest-report.txt");
@@ -299,6 +304,16 @@ public final class HexSettingsActivity extends Activity {
                 } catch(Exception e) {
                     RunLog.failure(this,"HEX driver import failed",e);
                     runOnUiThread(()->{if(!isDestroyed())setBusy(false,"İçe aktarma başarısız: "+e.getMessage());});
+                }
+            });
+        } else if(request==EXPORT_LOGS) {
+            worker.execute(()->{
+                try(OutputStream out=getContentResolver().openOutputStream(uri,"w")) {
+                    if(out==null)throw new IOException("Cannot open log archive destination");
+                    RunLog.export(this,out);
+                    runOnUiThread(()->{status.setText(tr("Ham oyun logları dışa aktarıldı."));status.setVisibility(View.VISIBLE);});
+                } catch(Exception e) {
+                    runOnUiThread(()->new AlertDialog.Builder(this).setMessage(e.toString()).setPositiveButton("OK",null).show());
                 }
             });
         } else if(request==EXPORT_REPORT) {
