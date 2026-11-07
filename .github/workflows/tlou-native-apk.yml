@@ -2,7 +2,7 @@ name: TLOU Bionic Full Native and APK
 
 on:
   push:
-    branches: [android-bionic-stage1, tlou-ui-approval-log32-20261105]
+    branches: [android-bionic-stage1, tlou-ui-approval-log32-20261105, xclipse/enable-bc-textures]
     paths:
       - 'android/**'
       - 'android-launcher/**'
