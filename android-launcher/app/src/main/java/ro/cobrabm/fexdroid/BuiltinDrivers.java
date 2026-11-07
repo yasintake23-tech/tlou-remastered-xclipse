@@ -64,13 +64,16 @@ final class BuiltinDrivers {
 
     static synchronized void ensureDefault(Context context) throws Exception {
         SharedPreferences p=PortSettings.prefs(context);
-        // Even an explicit "system driver" choice (empty path) must win.
-        if(p.contains("driver_path"))return;
+        // Keep user-imported custom drivers. On the Xclipse 540, migrate an
+        // old explicit system-driver choice to the newly bundled compatible RADV.
+        final boolean xclipse540=PortSettings.isXclipse540();
+        String selectedPath=p.getString("driver_path","");
+        if(p.contains("driver_path") && (!xclipse540 || !selectedPath.isEmpty()))return;
         final String gpu;
         try { gpu=renderer(); }
         catch(Throwable e) { return; } // unknown GPU: keep system default
         String name=gpu.toLowerCase(Locale.ROOT);
-        if(PortSettings.isXclipse540() && name.contains("xclipse")) {
+        if(xclipse540 && name.contains("xclipse")) {
             installBundled(context,p,"drivers/radv-xclipse-27.0.0-devel-fe9b894.zip",
                 "9325769617812ddca2051c40364e33a2d85c6b3fa8c6c3e6208eb251549d4745",
                 "RADV Xclipse 27.0.0-RC1 · Xclipse 540","vulkan.radeon.so",34);

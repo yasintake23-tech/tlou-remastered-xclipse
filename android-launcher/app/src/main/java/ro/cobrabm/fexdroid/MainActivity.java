@@ -68,7 +68,7 @@ public final class MainActivity extends Activity {
         // Optional packaged driver installation runs off the main/UI thread.
         worker.execute(()->{
             try { BuiltinDrivers.ensureDefault(this); }
-            catch(Exception e) { android.util.Log.w("TLOU", "Bundled Turnip auto-select unavailable", e); }
+            catch(Exception e) { android.util.Log.w("TLOU", "Bundled Vulkan driver auto-select unavailable", e); }
             runOnUiThread(()->{if(!isDestroyed())refresh();});
         });
     }
@@ -362,7 +362,7 @@ public final class MainActivity extends Activity {
             // Finish first-run Adreno 6xx/7xx driver setup before the game
             // captures its launch environment, without overriding user choice.
             try { BuiltinDrivers.ensureDefault(this); }
-            catch(Exception e) { android.util.Log.w("TLOU", "Default Turnip unavailable", e); }
+            catch(Exception e) { android.util.Log.w("TLOU", "Default Vulkan driver unavailable", e); }
             File folder=selected(); File prepared;
             if(InstallTools.prepared(folder)){prepared=folder;tools.applyPatches(prepared,this::update);}
             else prepared=tools.prepare(folder,this::update);
