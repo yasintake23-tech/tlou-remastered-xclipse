@@ -17,6 +17,13 @@ final class PortSettings {
         return context.getSharedPreferences("tlou",Context.MODE_PRIVATE);
     }
 
+    static boolean isXclipse540() {
+        final String model=Build.MODEL==null?"":Build.MODEL.toUpperCase(Locale.ROOT);
+        final String soc=Build.VERSION.SDK_INT>=31 && Build.SOC_MODEL!=null
+            ?Build.SOC_MODEL.toUpperCase(Locale.ROOT):"";
+        return model.equals("SM-A566B") || soc.contains("EXYNOS 1580") || soc.contains("S5E8855");
+    }
+
     // Existing player-selected game, driver, patch and resolution preferences survive upgrades.
     // Old experiment preferences cannot silently reactivate discarded modes.
     static void retireTestPreferences(Context context) {
@@ -28,7 +35,21 @@ final class PortSettings {
             "prep_pool","cpu_trims","prefetch_pipelines","parallel_pipelines",
             "prep_workers","frames_ahead","descriptor_bulk","readback","sotc_precise_narrow",
             "compute_wait_fast","relaxed_skinning_fp"}) edit.remove(key);
-        String limit=prefs(context).getString("fps_limit","60");
+        SharedPreferences current=prefs(context);
+        if (isXclipse540()) {
+            // This phone's first test log showed that the saved performance preset
+            // had disabled the game's skin subsurface pass. Restore only that effect;
+            // retain every other graphics choice and the selected resolution.
+            if (!current.getBoolean("xclipse540_skin_lighting_v1",false)) {
+                edit.putBoolean("subsurface",false);
+                edit.putBoolean("xclipse540_skin_lighting_v1",true);
+            }
+            // Start with one low-priority draw-preparation worker on Xclipse 540.
+            // This is an A/B candidate, not a claimed FPS fix; the in-game menu
+            // lets the player compare Off / 1 / 2 workers.
+            if (!current.contains("draw_prep_workers")) edit.putString("draw_prep_workers","1");
+        }
+        String limit=current.getString("fps_limit","60");
         if(!"30".equals(limit) && !"60".equals(limit))edit.putString("fps_limit","60");
         edit.apply();
     }
@@ -171,7 +192,9 @@ final class PortSettings {
         env.put("GOW3_CPU_TRIMS","1");
         env.put("GOW3_PREFETCH_PIPELINES","1");
         env.put("GOW3_PARALLEL_PIPELINES","1");
-        env.put("GOW3_PREP_WORKERS","0");
+        String workers=p.getString("draw_prep_workers",isXclipse540()?"1":"0");
+        if (!"0".equals(workers) && !"1".equals(workers) && !"2".equals(workers)) workers="0";
+        env.put("GOW3_PREP_WORKERS",workers);
         env.put("GOW3_DEFERRED_READBACK","0");
         env.put("GOW3_STALE_READBACK","0");
 
@@ -200,6 +223,7 @@ final class PortSettings {
         result.append("; geometry-sync=full");
         result.append("; async-global-protect=").append(env.containsKey("GOW3_ASYNC_READBACK")?"on":"off");
         result.append("; geometry-sync policy=2 full only");
+        result.append("; draw-preparation-workers=").append(env.getOrDefault("GOW3_PREP_WORKERS","0"));
         result.append("; guest-job-worker-wake=")
               .append(conservativeJobWorkers()?"original":"patched-sleep");
         return result.toString();

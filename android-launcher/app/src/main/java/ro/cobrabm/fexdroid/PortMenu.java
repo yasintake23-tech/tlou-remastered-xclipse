@@ -203,6 +203,10 @@ final class PortMenu {
                 choice("fps_limit","Limite de FPS",
                     new String[]{"30 FPS","60 FPS"},
                     new String[]{"30","60"},"60");
+                choice("draw_prep_workers","Draw preparation workers",
+                    new String[]{"Off (0)","1 background worker","2 background workers"},
+                    new String[]{"0","1","2"},PortSettings.isXclipse540()?"1":"0");
+                note("Restart the game to apply. Compare Off / 1 / 2 on the same scene; more workers are not always faster.");
                 toggle("vsync","VSync",true);
                 choice("render_path","Método de resolução",
                     new String[]{"Unificado: cena e mira na mesma resolução",
@@ -216,6 +220,9 @@ final class PortMenu {
             case "patches":
                 heading("PATCHES");
                 note("Patches validados para o eboot reconhecido. Reinicie para aplicar.");
+                if (PortSettings.isXclipse540()) {
+                    note("Xclipse 540 profile: skin subsurface lighting is enabled; other effect choices are preserved.");
+                }
                 toggle("ssao","Desativar SSAO",false);
                 toggle("motion_blur","Desativar desfoque de movimento",false);
                 toggle("depth_of_field","Desativar profundidade de campo",false);
