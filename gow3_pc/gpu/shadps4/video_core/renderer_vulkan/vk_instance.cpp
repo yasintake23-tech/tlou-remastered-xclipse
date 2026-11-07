@@ -379,8 +379,6 @@ bool Instance::CreateDevice() {
         vk::PhysicalDeviceMaintenance5FeaturesKHR, vk::PhysicalDeviceMemoryPriorityFeaturesEXT,
         vk::PhysicalDevicePageableDeviceLocalMemoryFeaturesEXT>();
     features = feature_chain.get().features;
-    LOG_INFO(Render_Vulkan, "Texture compression BC support: {}",
-             features.textureCompressionBC ? "Yes" : "No");
 
     const vk::StructureChain properties_chain = physical_device.getProperties2<
         vk::PhysicalDeviceProperties2, vk::PhysicalDeviceVulkan11Properties,
@@ -691,9 +689,6 @@ bool Instance::CreateDevice() {
                 .depthBiasClamp = features.depthBiasClamp,
                 .fillModeNonSolid = features.fillModeNonSolid,
                 .depthBounds = features.depthBounds,
-                // BCn textures are required by the PS4 title. Forward the physical-device
-                // capability to the logical device; querying format support alone is not enough.
-                .textureCompressionBC = features.textureCompressionBC,
                 .wideLines = features.wideLines,
                 .multiViewport = features.multiViewport,
                 .samplerAnisotropy = features.samplerAnisotropy,
