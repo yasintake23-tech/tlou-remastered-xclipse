@@ -14,7 +14,7 @@
     PFN_vk##name vk##name=(PFN_vk##name)gipa(instance,"vk" #name); \
     if(!vk##name){fprintf(stderr,"HEX:missing_instance=vk%s\n",#name);return 2;}
 #define HEX_LOAD_DEVICE(name) \
-    PFN_vk##name vk##name=(PFN_vk##name)gipa(instance,"vk" #name); \
+    PFN_vk##name vk##name=(PFN_vk##name)vkGetDeviceProcAddr(device,"vk" #name); \
     if(!vk##name){fprintf(stderr,"HEX:missing_device=vk%s\n",#name);return 2;}
 
 static const char* result_name(VkResult r) {
@@ -90,6 +90,7 @@ int vulkan_smoke(void) {
     HEX_LOAD_INSTANCE(GetPhysicalDeviceFormatProperties)
     HEX_LOAD_INSTANCE(GetPhysicalDeviceImageFormatProperties)
     HEX_LOAD_INSTANCE(GetPhysicalDeviceMemoryProperties)
+    HEX_LOAD_INSTANCE(GetDeviceProcAddr)
     HEX_LOAD_INSTANCE(CreateDevice)
 
     uint32_t count=0;
