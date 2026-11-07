@@ -379,7 +379,7 @@ bool Instance::CreateDevice() {
         vk::PhysicalDeviceMaintenance5FeaturesKHR, vk::PhysicalDeviceMemoryPriorityFeaturesEXT,
         vk::PhysicalDevicePageableDeviceLocalMemoryFeaturesEXT>();
     features = feature_chain.get().features;
-    std::printf("GPU: textureCompressionBC=%s (reported physical-device capability)\\n",
+    std::printf("GPU: textureCompressionBC=%s (reported physical-device capability)\n",
                 features.textureCompressionBC ? "supported" : "NOT supported");
 
     const vk::StructureChain properties_chain = physical_device.getProperties2<
