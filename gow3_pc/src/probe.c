@@ -1009,6 +1009,8 @@ void runtime_restart(void) {
 
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
+    /* HEX runs in an isolated process before FEX or guest/game setup. */
+    if (argc == 2 && !strcmp(argv[1], "--vulkan-only")) return vulkan_smoke();
 #ifdef __ANDROID__
     tlou_cpu_policy_prepare();
 #endif
@@ -1022,7 +1024,6 @@ int main(int argc, char **argv) {
     /* FEX uses runtime_low_map to keep guest pointers representable in 40 bits. */
     guest_cpu_init(runtime_low_map);
 #endif
-    if (argc == 2 && !strcmp(argv[1], "--vulkan-only")) return vulkan_smoke();
 #ifdef _WIN32
     /* The PS4 user range must stay free of host allocations (GPU driver, heaps), and the guest
      * TCB needs one of the 64 TEB TLS slots before DLLs (Vulkan drivers) take them. */
