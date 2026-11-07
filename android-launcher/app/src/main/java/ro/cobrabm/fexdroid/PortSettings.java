@@ -19,8 +19,13 @@ final class PortSettings {
 
     static boolean isXclipse540() {
         final String model=Build.MODEL==null?"":Build.MODEL;
-        final String soc=Build.VERSION.SDK_INT>=31 && Build.SOC_MODEL!=null
+        String soc=Build.VERSION.SDK_INT>=31 && Build.SOC_MODEL!=null
             ?Build.SOC_MODEL:"";
+        if(soc.isEmpty()) {
+            final String hw=Build.HARDWARE==null?"":Build.HARDWARE;
+            final String board=Build.BOARD==null?"":Build.BOARD;
+            soc=hw+" "+board;
+        }
         return isXclipse540(model,soc);
     }
 
@@ -28,7 +33,7 @@ final class PortSettings {
     static boolean isXclipse540(String model,String soc) {
         final String normalizedModel=model==null?"":model.toUpperCase(Locale.ROOT);
         final String normalizedSoc=soc==null?"":soc.toUpperCase(Locale.ROOT);
-        return normalizedModel.equals("SM-A566B") ||
+        return (normalizedModel.startsWith("SM-A566") && normalizedModel.length() <= 9) ||
             normalizedSoc.contains("EXYNOS 1580") || normalizedSoc.contains("S5E8855");
     }
 
@@ -170,6 +175,7 @@ final class PortSettings {
         // uses CPU-thread clocks only and remains disableable by an env override.
         // The native Android default is ON unless explicitly disabled.
         env.put("TLOU_CPU_PHASE_SAMPLES","1");
+        env.put("TLOU_FAST_RENDER_CORES","1");
         // Leave profiling truly disabled. Some native switches check presence,
         // so setting "0" instead of removing is incorrect.
         for(String name:new String[]{"GOW3_GPU_PROFILE","GOW3_FRAME_STATS","GOW3_PERF_DIAG"})

@@ -7,6 +7,10 @@ import static org.junit.Assert.*;
 public class XclipseRadvProfileTest {
     @Test public void detectsGalaxyA56ModelAndExynos1580Soc() {
         assertTrue(PortSettings.isXclipse540("SM-A566B",""));
+        assertTrue(PortSettings.isXclipse540("SM-A566E",""));
+        assertTrue(PortSettings.isXclipse540("SM-A566U",""));
+        assertTrue(PortSettings.isXclipse540("SM-A5660",""));
+        assertTrue(PortSettings.isXclipse540("SM-A566N",""));
         assertTrue(PortSettings.isXclipse540("SM-X520","Exynos 1580"));
         assertTrue(PortSettings.isXclipse540("unknown","s5e8855"));
         assertTrue(PortSettings.isXclipse540(null,"EXYNOS 1580"));
@@ -24,6 +28,7 @@ public class XclipseRadvProfileTest {
         assertTrue(XclipseRadvProfile.apply(env,true,"RADV Xclipse 27.0.0-RC1 · Xclipse 540"));
         assertEquals("0",env.get("RADV_XCLIPSE_DCC"));
         assertEquals("1",env.get("RADV_XCLIPSE_LOG"));
+        assertEquals("1",env.get("GOW3_PRESENT_SKIP_CLEAR"));
         assertFalse(env.containsKey("RADV_DEBUG"));
         assertFalse(env.containsKey("RADV_XCLIPSE_DBFLUSH"));
         assertFalse(env.containsKey("RADV_XCLIPSE_BC7_ASTC"));

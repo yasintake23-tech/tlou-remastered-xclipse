@@ -28,6 +28,8 @@ final class XclipseRadvProfile {
         environment.put("RADV_XCLIPSE_DCC","0");
         // Emits the driver's build and active-switch markers to logcat.
         environment.put("RADV_XCLIPSE_LOG","1");
+        // Skip redundant full-frame swapchain clear when the game frame covers the screen.
+        environment.put("GOW3_PRESENT_SKIP_CLEAR","1");
         // Never enable the slow per-submit hang tracer in normal gameplay.
         environment.remove("RADV_DEBUG");
         // Keep RC1 depth flush and compact BC4-BC7/BC6H defaults.
@@ -39,6 +41,6 @@ final class XclipseRadvProfile {
 
     static String describe() {
         return "Xclipse 540 RADV profile: DCC=off (render-target compatibility), " +
-            "RADV_XCLIPSE_LOG=1; RC1 depth flush and compact BC conversion defaults retained.";
+            "RADV_XCLIPSE_LOG=1, PRESENT_SKIP_CLEAR=1; RC1 depth flush and compact BC conversion defaults retained.";
     }
 }
