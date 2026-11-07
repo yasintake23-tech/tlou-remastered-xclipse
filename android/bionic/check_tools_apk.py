@@ -24,6 +24,10 @@ with zipfile.ZipFile(sys.argv[1]) as apk:
             ('libgow3cpu.so', 'libgow3gpu.so', 'libgow3present.so', 'libc++_shared.so')]]
         if b'g3PNjYKWqnQ#libSceRemoteplay' not in apk.read('assets/runtime/gow3-probe'):
             raise ValueError('Stale runtime: base TLOU Remote Play service is absent')
+        probe = apk.read('assets/runtime/gow3-probe')
+        for marker in (b'--vulkan-only', b'HEX:transfer_readback=', b'HEX:format.BC7_SRGB.image_usage='):
+            if marker not in probe:
+                raise ValueError(f'Missing HEX pre-game Vulkan diagnostic marker: {marker!r}')
         allowed = {'libc.so', 'libm.so', 'libdl.so', 'liblog.so', 'libandroid.so', 'libnativewindow.so',
                    'libc++_shared.so', 'libgow3cpu.so', 'libgow3gpu.so', 'libvulkan.so'}
         for name in names:
