@@ -5,6 +5,7 @@
 #include <android/hardware_buffer.h>
 #include <poll.h>
 #include <unistd.h>
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -22,9 +23,44 @@ namespace Vulkan {
 namespace {
 
 constexpr u32 AhbFormat = AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
-constexpr u64 AhbUsage = AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT |
-                         AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE |
-                         AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY;
+constexpr u64 AhbLinearCpuUsage = AHARDWAREBUFFER_USAGE_CPU_READ_RARELY |
+                                  AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY;
+constexpr u64 AhbLinearCpuOftenUsage = AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
+                                       AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN;
+constexpr u64 AhbBaseGpuUsage = AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT |
+                                AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
+constexpr u64 AhbUsage = AhbBaseGpuUsage |
+                         AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY |
+                         AhbLinearCpuUsage;
+
+struct NativeHandleHeader {
+    int version;
+    int num_fds;
+    int num_ints;
+};
+
+constexpr u32 SamsungGrallocMagic = 0x59700795u;
+constexpr u32 SamsungGrallocLayoutLinear = 1u;
+
+bool CheckSamsungGrallocLinear(const AHardwareBuffer* ahb, u32& out_layout, u32& out_stride) {
+    out_layout = 0;
+    out_stride = 0;
+    if (!ahb) {
+        return false;
+    }
+    const auto* raw =
+        reinterpret_cast<const NativeHandleHeader*>(AHardwareBuffer_getNativeHandle(ahb));
+    if (!raw || raw->num_fds < 0 || raw->num_ints < 0 || (raw->num_fds + raw->num_ints) < 51) {
+        return true;
+    }
+    const auto* words = reinterpret_cast<const u32*>(raw);
+    if (words[8] != SamsungGrallocMagic) {
+        return true;
+    }
+    out_stride = words[38];
+    out_layout = words[41];
+    return out_layout == SamsungGrallocLayoutLinear;
+}
 
 /// GOW3_PRESENT_BUFFERS: the number of buffers (3 by default: one shown, one pending, one rendered).
 u32 BufferCount() {
@@ -146,16 +182,74 @@ void Swapchain::CreateBuffer(u32 index) {
     const vk::Device device = instance.GetDevice();
     Buffer& buffer = buffers[index];
 
-    const AHardwareBuffer_Desc desc{
-        .width = width,
-        .height = height,
-        .layers = 1,
-        .format = AhbFormat,
-        .usage = AhbUsage,
+    constexpr std::array<u64, 5> candidate_usages = {
+        AhbBaseGpuUsage | AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY | AhbLinearCpuUsage,
+        AhbBaseGpuUsage | AhbLinearCpuUsage,
+        AhbBaseGpuUsage | AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY | AhbLinearCpuOftenUsage,
+        AhbBaseGpuUsage | AhbLinearCpuOftenUsage,
+        AhbBaseGpuUsage | AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY,
     };
-    const int allocated = AHardwareBuffer_allocate(&desc, &buffer.ahb);
-    ASSERT_MSG(allocated == 0 && buffer.ahb, "AHardwareBuffer_allocate {}x{} failed: {}", width,
-               height, allocated);
+
+    int last_allocated = -1;
+    u64 chosen_usage = 0;
+    u32 chosen_layout = 0;
+    u32 chosen_stride = 0;
+    AHardwareBuffer* fallback_ahb = nullptr;
+    u64 fallback_usage = 0;
+    u32 fallback_layout = 0;
+    u32 fallback_stride = 0;
+
+    for (const u64 candidate_usage : candidate_usages) {
+        const AHardwareBuffer_Desc desc{
+            .width = width,
+            .height = height,
+            .layers = 1,
+            .format = AhbFormat,
+            .usage = candidate_usage,
+        };
+        AHardwareBuffer* candidate_ahb = nullptr;
+        last_allocated = AHardwareBuffer_allocate(&desc, &candidate_ahb);
+        if (last_allocated != 0 || !candidate_ahb) {
+            continue;
+        }
+        u32 sgr_layout = 0;
+        u32 sgr_stride = 0;
+        if (CheckSamsungGrallocLinear(candidate_ahb, sgr_layout, sgr_stride)) {
+            if (fallback_ahb) {
+                AHardwareBuffer_release(fallback_ahb);
+                fallback_ahb = nullptr;
+            }
+            buffer.ahb = candidate_ahb;
+            chosen_usage = candidate_usage;
+            chosen_layout = sgr_layout;
+            chosen_stride = sgr_stride;
+            break;
+        }
+        LOG_WARNING(Render_Vulkan,
+                    "AHB buffer {} with usage {:#x} allocated non-linear Samsung Gralloc layout {} "
+                    "(stride {}); retrying for linear layout",
+                    index, candidate_usage, sgr_layout, sgr_stride);
+        if (!fallback_ahb) {
+            fallback_ahb = candidate_ahb;
+            fallback_usage = candidate_usage;
+            fallback_layout = sgr_layout;
+            fallback_stride = sgr_stride;
+        } else {
+            AHardwareBuffer_release(candidate_ahb);
+        }
+    }
+
+    if (!buffer.ahb && fallback_ahb) {
+        buffer.ahb = fallback_ahb;
+        chosen_usage = fallback_usage;
+        chosen_layout = fallback_layout;
+        chosen_stride = fallback_stride;
+    }
+
+    ASSERT_MSG(buffer.ahb != nullptr, "AHardwareBuffer_allocate {}x{} failed: {}", width,
+               height, last_allocated);
+    LOG_INFO(Render_Vulkan, "AHB buffer {}: {}x{} usage={:#x} sgr1_layout={} sgr1_stride={}",
+             index, width, height, chosen_usage, chosen_layout, chosen_stride);
 
     auto [props_result, props_chain] = device.getAndroidHardwareBufferPropertiesANDROID<
         vk::AndroidHardwareBufferPropertiesANDROID, vk::AndroidHardwareBufferFormatPropertiesANDROID>(

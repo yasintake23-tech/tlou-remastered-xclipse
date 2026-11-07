@@ -122,6 +122,7 @@ static struct {
     void (*set_transparency)(ASurfaceTransaction*, ASurfaceControl*, int8_t);
     void (*set_on_complete)(ASurfaceTransaction*, void*, void (*)(void*, ASurfaceTransactionStats*));
     void (*set_on_commit)(ASurfaceTransaction*, void*, void (*)(void*, ASurfaceTransactionStats*)); /* API 31, optional */
+    void (*set_z_order)(ASurfaceTransaction*, ASurfaceControl*, int32_t); /* API 29, optional */
     int (*prev_release_fence)(ASurfaceTransactionStats*, ASurfaceControl*);
     int (*get_present_fence)(ASurfaceTransactionStats*);
     void (*get_controls)(ASurfaceTransactionStats*, ASurfaceControl***, size_t*);
@@ -134,6 +135,7 @@ static void load_api(void) {
     void* lib = dlopen("libandroid.so", RTLD_NOW);
     if (!lib) { api.missing_symbol = "libandroid.so"; return; }
     *(void**)&api.set_on_commit = dlsym(lib, "ASurfaceTransaction_setOnCommit"); /* optional */
+    *(void**)&api.set_z_order = dlsym(lib, "ASurfaceTransaction_setZOrder"); /* optional */
 #define SYM(field, name) do { \
     *(void**)&api.field = dlsym(lib, name); \
     if (!api.field) { api.missing_symbol = name; LOGE("missing Android presentation API: %s", name); return; } \
@@ -375,6 +377,7 @@ static void show_frame(uint32_t generation, uint32_t index, uint64_t frame, uint
     ASurfaceTransaction* t = api.txn_create();
     api.set_buffer(t, S.sc, S.bufs[index], acquire_fd); /* takes the fd */
     api.set_geometry(t, S.sc, &src, &dst, 0);
+    if (api.set_z_order) api.set_z_order(t, S.sc, 1);
     api.set_transparency(t, S.sc, ASURFACE_TRANSACTION_TRANSPARENCY_OPAQUE);
     api.set_visibility(t, S.sc, ASURFACE_TRANSACTION_VISIBILITY_SHOW);
     api.set_on_complete(t, ctx, on_complete);
