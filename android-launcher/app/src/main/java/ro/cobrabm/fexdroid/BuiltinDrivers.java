@@ -70,6 +70,12 @@ final class BuiltinDrivers {
         try { gpu=renderer(); }
         catch(Throwable e) { return; } // unknown GPU: keep system default
         String name=gpu.toLowerCase(Locale.ROOT);
+        if(PortSettings.isXclipse540() && name.contains("xclipse")) {
+            installBundled(context,p,"drivers/radv-xclipse-27.0.0-devel-fe9b894.zip",
+                "9325769617812ddca2051c40364e33a2d85c6b3fa8c6c3e6208eb251549d4745",
+                "RADV Xclipse 27.0.0-RC1 · Xclipse 540","vulkan.radeon.so",34);
+            return;
+        }
         if(!name.contains("adreno"))return;
         boolean a8=name.matches(".*\\b8[0-9]{2}\\b.*");
         boolean a67=name.matches(".*\\b[67][0-9]{2}\\b.*");
@@ -77,6 +83,11 @@ final class BuiltinDrivers {
         String asset=a8?ASSET_8XX:ASSET;
         String digest=a8?SHA_8XX:SHA;
         String display=a8?"Turnip Gen8 V38 Patched · Adreno 8xx":"Turnip v27.0.0-R1 · Adreno 6xx/7xx";
+        installBundled(context,p,asset,digest,display,"libvulkan_freedreno.so",26);
+    }
+
+    private static void installBundled(Context context,SharedPreferences prefs,String asset,
+            String digest,String display,String fallbackLibrary,int fallbackApi) throws Exception {
         File drivers=new File(context.getFilesDir(),"drivers");
         try(InputStream archive=context.getAssets().open(asset)){
             DriverArchive.Installed installed=DriverArchive.install(
@@ -85,16 +96,15 @@ final class BuiltinDrivers {
                         java.nio.charset.StandardCharsets.UTF_8));
                     return new DriverArchive.Metadata(
                         meta.optString("name",display),
-                        meta.optString("libraryName","libvulkan_freedreno.so"),
-                        meta.optInt("minApi",26));
+                        meta.optString("libraryName",fallbackLibrary),
+                        meta.optInt("minApi",fallbackApi));
                 });
             if(!digest.equals(installed.id))
-                throw new IllegalStateException("Turnip R1 archive digest mismatch");
-            p.edit().putString("driver_path",installed.library.getAbsolutePath())
+                throw new IllegalStateException(display+" archive SHA-256 mismatch");
+            prefs.edit().putString("driver_path",installed.library.getAbsolutePath())
                 .putString("driver_name",display).apply();
         } catch(java.io.FileNotFoundException missingAsset) {
-            // Developer checkout without staged APK assets: system driver, never
-            // secretly pick an incompatible one.
+            // Developer checkout without staged APK assets: retain system driver.
         }
     }
 }

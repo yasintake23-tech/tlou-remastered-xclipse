@@ -298,6 +298,18 @@ public final class GameActivity extends Activity {
             env.put("GOW3_FSR1","0");
             env.put("GOW3_RCAS","0");
             PortSettings.environment(this,env);
+            String selectedDriverName=getSharedPreferences("tlou",MODE_PRIVATE)
+                .getString("driver_name","");
+            if(PortSettings.isXclipse540() &&
+                selectedDriverName.toLowerCase(Locale.ROOT).contains("radv")) {
+                // RADV Xclipse 27.0.0 documents DCC-off as the compatibility
+                // fallback for black, flickering and corrupted render targets.
+                // Keep debug tracing and slower optional conversion modes off.
+                env.put("RADV_XCLIPSE_DCC","0");
+                env.remove("RADV_XCLIPSE_LOG");
+                env.remove("RADV_DEBUG");
+                RunLog.write(this,"Xclipse 540 RADV profile: DCC disabled for render-target stability");
+            }
             RunLog.write(this,PortSettings.experimentReport(this,env));
             String driver=getSharedPreferences("tlou",MODE_PRIVATE).getString("driver_path", "");
             if(!driver.isEmpty()) {

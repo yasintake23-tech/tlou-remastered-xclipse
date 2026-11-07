@@ -35,6 +35,8 @@ turnip_zip="$turnip_dir/turnip-v27-r1-a6xx-a7xx.zip"
 turnip_sha="07938ef843a73dd47ebb88ba9c2d3bca011667bd2b657e3b4a75d9ba8ed591a0"
 turnip_gen8_zip="$turnip_dir/turnip-gen8-v38-patched-a8xx.zip"
 turnip_gen8_sha="2bbb279a3da7680503a54a51a3051c7a4302c8fb2a089f8b183b4b5d6ba9ac17"
+radv_zip="$turnip_dir/radv-xclipse-27.0.0-devel-fe9b894.zip"
+radv_sha="9325769617812ddca2051c40364e33a2d85c6b3fa8c6c3e6208eb251549d4745"
 mkdir -p "$turnip_dir"
 if [[ ! -s "$turnip_zip" ]] || ! echo "$turnip_sha  $turnip_zip" | sha256sum -c --status; then
   tmp="$turnip_zip.download"
@@ -60,6 +62,20 @@ if [[ ! -s "$turnip_gen8_zip" ]] || ! echo "$turnip_gen8_sha  $turnip_gen8_zip" 
   mv "$temp" "$turnip_gen8_zip"
 fi
 echo "$turnip_gen8_sha  $turnip_gen8_zip" | sha256sum -c
+# Pinned RADV Xclipse release for Exynos 1580 / Xclipse 540.
+if [[ ! -s "$radv_zip" ]] || ! echo "$radv_sha  $radv_zip" | sha256sum -c --status; then
+  temp="$radv_zip.download"
+  rm -f "$temp"
+  curl -fL --retry 3 --connect-timeout 20 --max-time 120 \
+    "https://github.com/JimVulkan/radv-xclipse/releases/download/v1.9.0-RC1/radv-xclipse-27.0.0-devel-fe9b894.zip" -o "$temp"
+  echo "$radv_sha  $temp" | sha256sum -c
+  unzip -Z -1 "$temp" | grep -q 'meta.json'
+  unzip -Z -1 "$temp" | grep -q 'vulkan.radeon.so'
+  mv "$temp" "$radv_zip"
+fi
+echo "$radv_sha  $radv_zip" | sha256sum -c
+unzip -Z -1 "$radv_zip" | grep -q 'meta.json'
+unzip -Z -1 "$radv_zip" | grep -q 'vulkan.radeon.so'
 cp "$out/bin/gow3-probe" "$assets/gow3-probe"
 for lib in libgow3cpu.so libgow3gpu.so libgow3present.so libc++_shared.so; do
   cp "$out/lib/$lib" "$stage/$lib"
@@ -86,6 +102,8 @@ unzip -Z -1 "$apk" | grep -q 'lib/arm64-v8a/libgow3cpu.so'
 unzip -Z -1 "$apk" | grep -q 'lib/arm64-v8a/libgow3present.so'
 unzip -Z -1 "$apk" | grep -q 'assets/runtime/gow3-probe'
 unzip -Z -1 "$apk" | grep -q 'assets/tools.zip'
+unzip -Z -1 "$apk" | grep -q 'assets/drivers/radv-xclipse-27.0.0-devel-fe9b894.zip'
+unzip -p "$apk" assets/drivers/radv-xclipse-27.0.0-devel-fe9b894.zip | sha256sum | grep -q "^$radv_sha "
 unzip -Z -1 "$apk" | grep -q 'lib/arm64-v8a/libpython3.13.so'
 sha256sum "$apk" > "$apk.sha256"
 echo "Experimental TLOU APK signed and validated: $apk"
