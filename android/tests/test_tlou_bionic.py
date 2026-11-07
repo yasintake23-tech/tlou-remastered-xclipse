@@ -97,16 +97,10 @@ class TestTLOUBionic(unittest.TestCase):
             with self.assertRaisesRegex(m.PortError, "índice incompleto"):
                 m.validate_game_assets(valid)
             archive.unlink()
-            (valid/"dvdroot_ps4/build/ps4/main/boot.txt").unlink()
-            # Optional directory content is not proof of bad game dumps: the
-            # previously working Redmagic installation has no dvdroot_ps4.
-            m.validate_game_assets(valid)
-            (valid/"dvdroot_ps4/build/ps4/main").rmdir()
-            m.validate_game_assets(valid)
-            (valid/"dvdroot_ps4/build/ps4").rmdir()
-            (valid/"dvdroot_ps4/build").rmdir()
-            (valid/"dvdroot_ps4").rmdir()
-            m.validate_game_assets(valid)
+            self.assertEqual(m.validate_game_assets(valid), valid/"dvdroot_ps4")
+            m.shutil.rmtree(valid/"dvdroot_ps4")
+            with self.assertRaisesRegex(m.PortError, "raiz de recursos do jogo não foi localizada"):
+                m.validate_game_assets(valid)
             self.assertEqual(m.require_game(valid)["TITLE_ID"], "CUSA00552")
 
     def test_content_roots_are_flattened_to_app0(self):
@@ -114,7 +108,8 @@ class TestTLOUBionic(unittest.TestCase):
             root = Path(tmp)
             game = make_game(root/"game")
             view = m.build_view(game, None, root/"out")
-            self.assertTrue((view/"build/ps4/main/boot.txt").is_symlink())
+            self.assertTrue((view/"build").is_symlink())
+            self.assertTrue((view/"build/ps4/main/boot.txt").is_file())
             self.assertTrue((view/"build/ps4/main/boot1/coin-3d.dds").is_symlink())
             self.assertFalse((view/"dvdroot_ps4").exists())
 
@@ -148,12 +143,13 @@ class TestTLOUBionic(unittest.TestCase):
             view = m.build_view(base, update, t/"work")
             self.assertEqual((view/"eboot.bin").read_bytes(), b"update eboot")
             self.assertEqual((view/"sce_module/libc.prx").read_bytes(), b"libc")
-            self.assertEqual((view/"dvdroot_ps4/resource.bin").read_bytes(), b"resource")
+            self.assertEqual((view/"resource.bin").read_bytes(), b"resource")
             self.assertEqual((base/"eboot.bin").read_bytes(), b"test game")
             self.assertTrue((view/"eboot.bin").is_symlink())
             self.assertFalse((view/"dvdroot_ps4").exists())
-            self.assertTrue((view/"build/ps4/main/boot.txt").is_symlink())
-            self.assertTrue((view/"build/ps4/main/lut0/default-color-gray.dds").is_symlink())
+            self.assertTrue((view/"build").is_symlink())
+            self.assertTrue((view/"build/ps4/main/boot.txt").is_file())
+            self.assertTrue((view/"build/ps4/main/lut0/default-color-gray.dds").is_file())
 
     def test_invalid_sfo_and_missing_libc(self):
         with tempfile.TemporaryDirectory() as tmp:
