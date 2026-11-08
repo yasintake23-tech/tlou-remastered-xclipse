@@ -12,6 +12,12 @@ int main(void) {
         close(fds[0]);alarm(2);
         GuestRegs regs={0};
         uintptr_t caller[2]={0,0x92c961+0x400000};
+        uint8_t dummy_code[64];
+        for (int i=0; i<64; ++i) dummy_code[i] = (uint8_t)(0x10 + i);
+        regs.rip = (uintptr_t)&dummy_code[32];
+        regs.has_xmm = 1;
+        regs.xmm[0][0] = 0x1122334455667788ULL;
+        regs.xmm[0][1] = 0x99aabbccddeeff00ULL;
         regs.gpr[GUEST_RBX]=0x20;regs.gpr[GUEST_RCX]=0;
         regs.gpr[GUEST_RBP]=(uintptr_t)caller;
         uintptr_t probe[2];
@@ -20,6 +26,7 @@ int main(void) {
         if (!can_read) { const char note[]="frame-read-unavailable\n";ssize_t r=write(fds[1],note,sizeof(note)-1);(void)r; }
         dump_guest_fault_regs(fds[1],&regs,0x400000,NULL);
         regs.gpr[GUEST_RBP]=1; // unreadable frame must terminate the walk safely
+        regs.rip=0x1000;       // unmapped RIP must log error without fake bytes or secondary fault
         dump_guest_fault_regs(fds[1],&regs,0x400000,NULL);
         _exit(139);
     }
@@ -28,6 +35,9 @@ int main(void) {
     text[used]=0;close(fds[0]);int status;assert(waitpid(child,&status,0)==child);
     assert(WIFEXITED(status) && WEXITSTATUS(status)==139);
     assert(strstr(text,"Guest register rbx=0000000000000020"));
+    assert(strstr(text,"Guest register xmm0=99aabbccddeeff001122334455667788 (GUEST XMM)"));
+    assert(strstr(text,"Guest opcodes around RIP"));
+    assert(strstr(text,"Hex: <memory unmapped or read error - no synthetic bytes generated>"));
     if (!strstr(text,"frame-read-unavailable")) assert(strstr(text,"image-relative=000000000092c961"));
     return 0;
 }

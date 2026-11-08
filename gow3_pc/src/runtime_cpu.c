@@ -5,6 +5,7 @@
 #include "runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <x86intrin.h>
 #ifndef _WIN32
@@ -41,6 +42,17 @@ int guest_cpu_signal_regs(const void *ucontext, GuestRegs *regs) {
     const greg_t *g=((const ucontext_t *)ucontext)->uc_mcontext.gregs;
     for (int i=0;i<GUEST_GPRS;++i) regs->gpr[i]=(uint64_t)g[order[i]];
     regs->rip=(uint64_t)g[REG_RIP];
+    memset(regs->xmm, 0, sizeof(regs->xmm));
+    regs->has_xmm = 0;
+    const ucontext_t *uc = (const ucontext_t *)ucontext;
+    if (uc->uc_mcontext.fpregs) {
+        const uint64_t *x = (const uint64_t *)uc->uc_mcontext.fpregs->_xmm;
+        for (int i = 0; i < 16; ++i) {
+            regs->xmm[i][0] = x[i*2];
+            regs->xmm[i][1] = x[i*2+1];
+        }
+        regs->has_xmm = 1;
+    }
     return GUEST_CPU_IN_GUEST;
 }
 uintptr_t guest_cpu_host_pc(const void *ucontext) { return (uintptr_t)((const ucontext_t *)ucontext)->uc_mcontext.gregs[REG_RIP]; }

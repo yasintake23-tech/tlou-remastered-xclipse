@@ -23,7 +23,12 @@ enum {
     GUEST_R8, GUEST_R9, GUEST_R10, GUEST_R11, GUEST_R12, GUEST_R13, GUEST_R14, GUEST_R15,
     GUEST_GPRS
 };
-typedef struct { uint64_t gpr[GUEST_GPRS]; uint64_t rip; } GuestRegs;
+typedef struct {
+    uint64_t gpr[GUEST_GPRS];
+    uint64_t rip;
+    uint64_t xmm[16][2];
+    uint32_t has_xmm;
+} GuestRegs;
 
 /* Once, before any other call. `map` allocates memory the guest may hold pointers to (below
  * 1 TiB: the game packs pointers into 40 bits), as runtime_low_map. */
