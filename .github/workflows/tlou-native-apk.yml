@@ -89,8 +89,21 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.14206865'
+      - name: Install micromamba binary with mirror fallback
+        run: |
+          mkdir -p "$HOME/micromamba-bin"
+          if ! (curl -fsSL --retry 3 --connect-timeout 15 "https://conda.anaconda.org/conda-forge/linux-64/micromamba-2.0.5-0.tar.bz2" | tar -xj -O bin/micromamba > "$HOME/micromamba-bin/micromamba") && \
+             ! (curl -fsSL --retry 3 --connect-timeout 15 "https://micro.mamba.pm/api/micromamba/linux-64/2.0.5" | tar -xj -O bin/micromamba > "$HOME/micromamba-bin/micromamba") && \
+             ! curl -fsSL --retry 3 --connect-timeout 15 "https://github.com/mamba-org/micromamba-releases/releases/download/2.0.5-0/micromamba-linux-64" -o "$HOME/micromamba-bin/micromamba"; then
+            echo "Failed to download micromamba from all mirrors" >&2
+            exit 1
+          fi
+          chmod +x "$HOME/micromamba-bin/micromamba"
+          "$HOME/micromamba-bin/micromamba" --version
       - uses: mamba-org/setup-micromamba@v2
         with:
+          download-micromamba: false
+          micromamba-binary-path: /home/runner/micromamba-bin/micromamba
           environment-file: ci/environment.yml
           cache-environment: true
           init-shell: bash
