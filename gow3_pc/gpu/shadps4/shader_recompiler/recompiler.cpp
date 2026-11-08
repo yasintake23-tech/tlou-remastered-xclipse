@@ -115,9 +115,15 @@ IR::Program TranslateProgram(const std::span<const u32>& code, Pools& pools, Inf
                 for (size_t arg = 0; arg < inst.NumArgs(); ++arg) {
                     const IR::Value value = inst.Arg(arg);
                     float patched;
-                    if (value.IsImmediate() && value.Type() == IR::Type::F32 &&
+                    if (!value.IsImmediate()) {
+                        continue;
+                    }
+                    if (value.Type() == IR::Type::F32 &&
                         Gow3Movie::MovieShaderConstant(std::bit_cast<u32>(value.F32()), patched)) {
                         inst.SetArg(arg, IR::Value{patched});
+                    } else if (value.Type() == IR::Type::U32 &&
+                               Gow3Movie::MovieShaderConstant(value.U32(), patched)) {
+                        inst.SetArg(arg, IR::Value{std::bit_cast<u32>(patched)});
                     }
                 }
             }

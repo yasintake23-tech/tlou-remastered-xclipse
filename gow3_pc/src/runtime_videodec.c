@@ -112,14 +112,6 @@ static int32_t picture(Decoder *d, FrameBuffer *buffer, PictureInfo *info) {
     uint32_t pitch=align(width,64), rows=align(height,16);
     if ((uint64_t)pitch*rows*3/2>buffer->frame_buffer_size) return ERR_FRAME_BUFFER_SIZE;
     unsigned char *luma=buffer->frame_buffer, *chroma=luma+(size_t)pitch*rows;
-    for (uint32_t y=0;y<rows;++y) {
-        uint32_t from=y<height ? y : height-1;
-        memcpy(luma+(size_t)y*pitch,f->data[0]+(size_t)from*(size_t)f->linesize[0],width);
-        if (y<rows/2) {
-            uint32_t c=y<height/2 ? y : height/2-1;
-            memcpy(chroma+(size_t)y*pitch,f->data[1]+(size_t)c*(size_t)f->linesize[1],width);
-        }
-    }
     {
         static int logged;
         runtime_video_frame_lo=(uint64_t)(uintptr_t)luma;
@@ -146,6 +138,15 @@ static int32_t picture(Decoder *d, FrameBuffer *buffer, PictureInfo *info) {
                    width, height, shown_width, shown_height);
         pitch=align(shown_width,64);
         rows=align(shown_height,16);
+    } else {
+        for (uint32_t y=0;y<rows;++y) {
+            uint32_t from=y<height ? y : height-1;
+            memcpy(luma+(size_t)y*pitch,f->data[0]+(size_t)from*(size_t)f->linesize[0],width);
+            if (y<rows/2) {
+                uint32_t c=y<height/2 ? y : height/2-1;
+                memcpy(chroma+(size_t)y*pitch,f->data[1]+(size_t)c*(size_t)f->linesize[1],width);
+            }
+        }
     }
     info->is_valid=1; info->codec_type=0;
     info->frame_width=align(shown_width,16);

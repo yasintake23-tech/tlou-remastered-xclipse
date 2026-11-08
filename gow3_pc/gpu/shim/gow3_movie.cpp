@@ -168,7 +168,7 @@ std::uint64_t ShaderKey(std::uint64_t hash, const std::uint32_t* code, std::size
     }
     std::uint64_t key = hash;
     if (IsMovieShader(code, words)) {
-        key ^= (std::uint64_t(Display().width) << 32 | Display().height) * 0x9e3779b97f4a7c15ull;
+        key ^= (std::uint64_t(Display().width) << 32 | Display().height) * 0x9e3779b97f4a7c17ull;
         static std::atomic<unsigned> matched{0};
         if (matched.fetch_add(1, std::memory_order_relaxed) < 4) {
             std::printf("TLOU movie NV12 shader: rescaled 1920x1088 Y/UV coordinates "

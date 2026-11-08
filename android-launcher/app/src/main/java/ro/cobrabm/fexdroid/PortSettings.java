@@ -92,11 +92,24 @@ final class PortSettings {
     }
 
     static boolean conservativeJobWorkers() {
-        final String model=Build.MODEL==null?"":Build.MODEL.toUpperCase(Locale.ROOT);
-        final String soc=Build.VERSION.SDK_INT>=31 && Build.SOC_MODEL!=null
-            ?Build.SOC_MODEL.toUpperCase(Locale.ROOT):"";
-        // Do not apply this device-specific workaround globally to all Adreno.
-        return soc.contains("SM7475") || model.equals("23049PCD8G");
+        final String model=Build.MODEL==null?"":Build.MODEL;
+        String soc=Build.VERSION.SDK_INT>=31 && Build.SOC_MODEL!=null
+            ?Build.SOC_MODEL:"";
+        if(soc.isEmpty()) {
+            final String hw=Build.HARDWARE==null?"":Build.HARDWARE;
+            final String board=Build.BOARD==null?"":Build.BOARD;
+            soc=hw+" "+board;
+        }
+        return conservativeJobWorkers(model,soc);
+    }
+
+    static boolean conservativeJobWorkers(String model,String soc) {
+        final String normalizedModel=model==null?"":model.toUpperCase(Locale.ROOT);
+        final String normalizedSoc=soc==null?"":soc.toUpperCase(Locale.ROOT);
+        // Galaxy A56 5G (Exynos 1580 / Xclipse 540) and Xiaomi 23049PCD8G hit
+        // HALT: Job System Deadlock Detected (corelib/job/job-scheduling.cpp:746)
+        // when job-sleep forces workers onto a condvar without patching counter-decrement wakes.
+        return isXclipse540(model,soc) || normalizedSoc.contains("SM7475") || normalizedModel.equals("23049PCD8G");
     }
 
     static void environment(Context context,Map<String,String> env) {
@@ -199,6 +212,7 @@ final class PortSettings {
         // normal gameplay; an explicit native diagnostic can still enable it.
         env.remove("TLOU_PHYSICS_COVERAGE");
         env.put("GOW3_ASYNC_SHADERS","1");
+        if (isXclipse540()) env.put("GOW3_ASYNC_SHADERS","0");
         env.put("GOW3_FRAMES_AHEAD","0");
         env.put("TLOU_DESCRIPTOR_BULK","0");
         env.put("GOW3_PREP_POOL","1");

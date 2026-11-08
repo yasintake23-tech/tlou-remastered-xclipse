@@ -31,6 +31,9 @@ final class XclipseRadvProfile {
         environment.put("RADV_XCLIPSE_LOG","1");
         // Skip redundant full-frame swapchain clear when the game frame covers the screen.
         environment.put("GOW3_PRESENT_SKIP_CLEAR","1");
+        // Keep parallel/prefetched pipeline compilation, but wait at draw time instead of
+        // dropping draws ("Draws without a pipeline") which leaves render targets corrupted.
+        environment.put("GOW3_ASYNC_SHADERS","0");
         // Never enable the slow per-submit hang tracer in normal gameplay.
         environment.remove("RADV_DEBUG");
         // Keep RC1 depth flush and compact BC4-BC7/BC6H defaults.
@@ -42,6 +45,6 @@ final class XclipseRadvProfile {
 
     static String describe() {
         return "Xclipse 540 RADV profile: native DCC retained, " +
-            "RADV_XCLIPSE_LOG=1, PRESENT_SKIP_CLEAR=1; RC1 depth flush and compact BC conversion defaults retained.";
+            "RADV_XCLIPSE_LOG=1, PRESENT_SKIP_CLEAR=1, ASYNC_SHADERS=0; RC1 depth flush and compact BC conversion defaults retained.";
     }
 }

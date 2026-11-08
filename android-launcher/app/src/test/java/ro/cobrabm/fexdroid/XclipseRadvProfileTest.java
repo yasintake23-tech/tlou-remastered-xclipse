@@ -23,12 +23,21 @@ public class XclipseRadvProfileTest {
         assertFalse(PortSettings.isXclipse540(null,null));
     }
 
+    @Test public void usesConservativeJobWorkersOnXclipse540ToPreventDeadlock() {
+        assertTrue(PortSettings.conservativeJobWorkers("SM-A566B",""));
+        assertTrue(PortSettings.conservativeJobWorkers("SM-A566E","Exynos 1580"));
+        assertTrue(PortSettings.conservativeJobWorkers("unknown","s5e8855"));
+        assertTrue(PortSettings.conservativeJobWorkers("23049PCD8G","SM7475"));
+        assertFalse(PortSettings.conservativeJobWorkers("CPH2691","SM8750"));
+    }
+
     @Test public void appliesOnlyVerifiedXclipseRadvCompatibilityDefaults() {
         HashMap<String,String> env=new HashMap<>();
         assertTrue(XclipseRadvProfile.apply(env,true,"RADV Xclipse 27.0.0-RC1 · Xclipse 540"));
         assertFalse(env.containsKey("RADV_XCLIPSE_DCC"));
         assertEquals("1",env.get("RADV_XCLIPSE_LOG"));
         assertEquals("1",env.get("GOW3_PRESENT_SKIP_CLEAR"));
+        assertEquals("0",env.get("GOW3_ASYNC_SHADERS"));
         assertFalse(env.containsKey("RADV_DEBUG"));
         assertFalse(env.containsKey("RADV_XCLIPSE_DBFLUSH"));
         assertFalse(env.containsKey("RADV_XCLIPSE_BC7_ASTC"));
