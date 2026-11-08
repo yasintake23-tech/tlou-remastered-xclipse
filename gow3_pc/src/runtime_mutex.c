@@ -11,8 +11,22 @@
 #include <windows.h>
 #endif
 typedef struct { int type; } GuestAttr;
-typedef struct { pthread_mutex_t native; } GuestMutex;
+typedef struct {
+    pthread_mutex_t native;
+    int type;
+#ifdef __ANDROID__
+    void * volatile owner;
+    volatile uint32_t recursion;
+#endif
+} GuestMutex;
 static size_t created, locks, unlocks;
+static void *current_owner(void) {
+#ifdef __ANDROID__
+    void **slot = runtime_thread_fiber_slot();
+    if (slot && *slot) return *slot;
+#endif
+    return (void *)(uintptr_t)pthread_self();
+}
 static int32_t orbis_error(int e) {
     if (!e) return 0;
     unsigned code;
@@ -53,14 +67,19 @@ static ABI int32_t mutex_init(GuestMutex **out, GuestAttr **attr, const char *na
     if (type < 1 || type > 4) return orbis_error(EINVAL);
     GuestMutex *mutex = malloc(sizeof(*mutex));
     if (!mutex) return orbis_error(ENOMEM);
+    mutex->type = type;
+#ifdef __ANDROID__
+    mutex->owner = NULL;
+    mutex->recursion = 0;
+#endif
     pthread_mutexattr_t native_attr;
     int e = pthread_mutexattr_init(&native_attr);
     if (e) { free(mutex); return orbis_error(e); }
 #if defined(__ANDROID__)
     // On Android Bionic, PTHREAD_MUTEX_ERRORCHECK strictly requires the unlocking thread TID to match the locking TID.
     // When OrbisFiber tasks migrate across NdJobWorker threads, unlocking from a different worker thread returns EPERM (0x80020001),
-    // which deadlocks the job queue. PTHREAD_MUTEX_NORMAL permits cross-worker fiber unlocking.
-    int native_type = type == 2 ? PTHREAD_MUTEX_RECURSIVE : PTHREAD_MUTEX_NORMAL;
+    // which deadlocks the job queue. PTHREAD_MUTEX_NORMAL provides native mutual exclusion while GuestMutex tracks fiber ownership.
+    int native_type = PTHREAD_MUTEX_NORMAL;
 #else
     int native_type = type == 2 ? PTHREAD_MUTEX_RECURSIVE : type == 3 ? PTHREAD_MUTEX_NORMAL : PTHREAD_MUTEX_ERRORCHECK;
 #endif
@@ -90,20 +109,73 @@ static int32_t ensure_mutex(GuestMutex **mutex) {
 static ABI int32_t mutex_lock(GuestMutex **mutex) {
     int32_t e = ensure_mutex(mutex);
     if (e) return e;
+#ifdef __ANDROID__
+    GuestMutex *m = *mutex;
+    void *me = current_owner();
+    if (m->type == 2) {
+        if (__atomic_load_n(&m->owner, __ATOMIC_ACQUIRE) == me) {
+            __atomic_add_fetch(&m->recursion, 1, __ATOMIC_RELAXED);
+            ++locks;
+            return 0;
+        }
+    } else if (m->type == 1) {
+        if (__atomic_load_n(&m->owner, __ATOMIC_ACQUIRE) == me) {
+            return orbis_error(EDEADLK);
+        }
+    }
+#endif
     e = orbis_error(pthread_mutex_lock(&(*mutex)->native));
-    if (!e) ++locks;
+    if (!e) {
+#ifdef __ANDROID__
+        __atomic_store_n(&(*mutex)->owner, current_owner(), __ATOMIC_RELEASE);
+        __atomic_store_n(&(*mutex)->recursion, 1, __ATOMIC_RELAXED);
+#endif
+        ++locks;
+    }
     return e;
 }
 static ABI int32_t mutex_trylock(GuestMutex **mutex) {
     int32_t e = ensure_mutex(mutex);
     if (e) return e;
+#ifdef __ANDROID__
+    GuestMutex *m = *mutex;
+    void *me = current_owner();
+    if (m->type == 2) {
+        if (__atomic_load_n(&m->owner, __ATOMIC_ACQUIRE) == me) {
+            __atomic_add_fetch(&m->recursion, 1, __ATOMIC_RELAXED);
+            ++locks;
+            return 0;
+        }
+    }
+#endif
     e = orbis_error(pthread_mutex_trylock(&(*mutex)->native));
-    if (!e) ++locks;
+    if (!e) {
+#ifdef __ANDROID__
+        __atomic_store_n(&(*mutex)->owner, current_owner(), __ATOMIC_RELEASE);
+        __atomic_store_n(&(*mutex)->recursion, 1, __ATOMIC_RELAXED);
+#endif
+        ++locks;
+    }
     return e;
 }
 static ABI int32_t mutex_unlock(GuestMutex **mutex) {
     if (!mutex || (uintptr_t)*mutex == 2) return orbis_error(EINVAL);
     if ((uintptr_t)*mutex < 2) return orbis_error(EPERM);
+#ifdef __ANDROID__
+    GuestMutex *m = *mutex;
+    void *me = current_owner();
+    void *owner = __atomic_load_n(&m->owner, __ATOMIC_ACQUIRE);
+    if (owner != me) {
+        return orbis_error(EPERM);
+    }
+    if (m->type == 2) {
+        if (__atomic_sub_fetch(&m->recursion, 1, __ATOMIC_RELAXED) > 0) {
+            ++unlocks;
+            return 0;
+        }
+    }
+    __atomic_store_n(&m->owner, NULL, __ATOMIC_RELEASE);
+#endif
     int32_t e = orbis_error(pthread_mutex_unlock(&(*mutex)->native));
     if (!e) ++unlocks;
     return e;
@@ -128,8 +200,29 @@ static ABI int32_t mutex_timedlock(GuestMutex **mutex, uint32_t usec) {
     if (e) return e;
     struct timespec end;
     if (deadline_after(&end, usec)) return orbis_error(EINVAL);
+#ifdef __ANDROID__
+    GuestMutex *m = *mutex;
+    void *me = current_owner();
+    if (m->type == 2) {
+        if (__atomic_load_n(&m->owner, __ATOMIC_ACQUIRE) == me) {
+            __atomic_add_fetch(&m->recursion, 1, __ATOMIC_RELAXED);
+            ++locks;
+            return 0;
+        }
+    } else if (m->type == 1) {
+        if (__atomic_load_n(&m->owner, __ATOMIC_ACQUIRE) == me) {
+            return orbis_error(EDEADLK);
+        }
+    }
+#endif
     e = timed_error(pthread_mutex_timedlock(&(*mutex)->native, &end));
-    if (!e) ++locks;
+    if (!e) {
+#ifdef __ANDROID__
+        __atomic_store_n(&(*mutex)->owner, current_owner(), __ATOMIC_RELEASE);
+        __atomic_store_n(&(*mutex)->recursion, 1, __ATOMIC_RELAXED);
+#endif
+        ++locks;
+    }
     return e;
 }
 /* Condition variables: opaque handles over host pthread_cond (CLOCK_REALTIME,
@@ -215,16 +308,38 @@ static ABI int32_t cond_wait(GuestCond **cond, GuestMutex **mutex) {
     if (e) return e;
     if (!mutex || (uintptr_t)*mutex < 3) return orbis_error(EINVAL);
     ++waits;
-    return orbis_error(futex_cond_enabled() ? futex_cond_wait(*cond, *mutex, NULL)
-                                            : pthread_cond_wait(&(*cond)->native, &(*mutex)->native));
+#ifdef __ANDROID__
+    GuestMutex *m = *mutex;
+    uint32_t saved_rec = __atomic_load_n(&m->recursion, __ATOMIC_RELAXED);
+    __atomic_store_n(&m->owner, NULL, __ATOMIC_RELEASE);
+    __atomic_store_n(&m->recursion, 0, __ATOMIC_RELAXED);
+#endif
+    int ret = futex_cond_enabled() ? futex_cond_wait(*cond, *mutex, NULL)
+                                   : pthread_cond_wait(&(*cond)->native, &(*mutex)->native);
+#ifdef __ANDROID__
+    __atomic_store_n(&m->owner, current_owner(), __ATOMIC_RELEASE);
+    __atomic_store_n(&m->recursion, saved_rec, __ATOMIC_RELAXED);
+#endif
+    return orbis_error(ret);
 }
 static int32_t cond_wait_until(GuestCond **cond, GuestMutex **mutex, const struct timespec *end) {
     int32_t e = ensure_cond(cond);
     if (e) return e;
     if (!mutex || (uintptr_t)*mutex < 3 || !end) return orbis_error(EINVAL);
     ++waits;
-    return timed_error(futex_cond_enabled() ? futex_cond_wait(*cond, *mutex, end)
-                                            : pthread_cond_timedwait(&(*cond)->native, &(*mutex)->native, end));
+#ifdef __ANDROID__
+    GuestMutex *m = *mutex;
+    uint32_t saved_rec = __atomic_load_n(&m->recursion, __ATOMIC_RELAXED);
+    __atomic_store_n(&m->owner, NULL, __ATOMIC_RELEASE);
+    __atomic_store_n(&m->recursion, 0, __ATOMIC_RELAXED);
+#endif
+    int ret = futex_cond_enabled() ? futex_cond_wait(*cond, *mutex, end)
+                                   : pthread_cond_timedwait(&(*cond)->native, &(*mutex)->native, end);
+#ifdef __ANDROID__
+    __atomic_store_n(&m->owner, current_owner(), __ATOMIC_RELEASE);
+    __atomic_store_n(&m->recursion, saved_rec, __ATOMIC_RELAXED);
+#endif
+    return timed_error(ret);
 }
 static ABI int32_t cond_timedwait(GuestCond **cond, GuestMutex **mutex, uint32_t usec) {
     struct timespec end;

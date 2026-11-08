@@ -53,11 +53,36 @@ final class RunLog {
             try {
                 ActivityManager manager=(ActivityManager)c.getSystemService(Context.ACTIVITY_SERVICE);
                 if(manager!=null)for(ApplicationExitInfo exit:manager.getHistoricalProcessExitReasons(c.getPackageName(),0,5)) {
-                    String line=new Date(exit.getTimestamp())+" process="+exit.getProcessName()+" reason="+exit.getReason()+" status="+exit.getStatus()+" description="+exit.getDescription()+"\n";
-                    zip.write(line.getBytes(StandardCharsets.UTF_8));
+                    StringBuilder sb = new StringBuilder();
+                    sb.append(new Date(exit.getTimestamp())).append(" process=").append(exit.getProcessName())
+                      .append(" reason=").append(exit.getReason()).append(" status=").append(exit.getStatus())
+                      .append(" description=").append(exit.getDescription());
+                    if (Build.VERSION.SDK_INT >= 30) {
+                        sb.append(" pss=").append(exit.getPss() >> 20).append("MB")
+                          .append(" rss=").append(exit.getRss() >> 20).append("MB");
+                    }
+                    sb.append("\n");
+                    zip.write(sb.toString().getBytes(StandardCharsets.UTF_8));
                 }
             } catch(RuntimeException e) { zip.write(e.toString().getBytes(StandardCharsets.UTF_8)); }
             zip.closeEntry();
+            if (Build.VERSION.SDK_INT >= 30) {
+                try {
+                    ActivityManager manager=(ActivityManager)c.getSystemService(Context.ACTIVITY_SERVICE);
+                    if(manager!=null)for(ApplicationExitInfo exit:manager.getHistoricalProcessExitReasons(c.getPackageName(),0,5)) {
+                        InputStream trace = exit.getTraceInputStream();
+                        if (trace != null) {
+                            try {
+                                zip.putNextEntry(new ZipEntry("tombstone-exit-" + exit.getTimestamp() + ".txt"));
+                                byte[] buf = new byte[8192];
+                                int len;
+                                while ((len = trace.read(buf)) != -1) zip.write(buf, 0, len);
+                                zip.closeEntry();
+                            } finally { trace.close(); }
+                        }
+                    }
+                } catch(Exception ignored) {}
+            }
         }
     }
 }

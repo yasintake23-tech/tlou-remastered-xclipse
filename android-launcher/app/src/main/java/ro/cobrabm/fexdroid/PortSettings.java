@@ -168,7 +168,7 @@ final class PortSettings {
         env.put("TLOU_RING_BINDING_CURSOR","1");
         env.put("TLOU_DRAW_COUNTER_TRIM","1");
         env.put("GOW3_TLOU_COMPUTE_MEMO","0");
-        env.put("GOW3_TLOU_HOST_COPY_BATCH","1");
+        env.put("GOW3_TLOU_HOST_COPY_BATCH","0");
         env.put("TLOU_SRT_HOT_READBACKS","1");
         env.put("TLOU_SRT_DEP_BATCH","0");
         env.put("GOW3_FETCH_NO_BLOCK","1");
@@ -211,7 +211,7 @@ final class PortSettings {
         env.put("GOW3_ASYNC_SHADERS","1");
         if (isXclipse540()) {
             env.put("GOW3_ASYNC_SHADERS","0");
-            env.put("GOW3_GC_BUDGET_MB","3584");
+            env.put("GOW3_TLOU_HOST_COPY_BATCH","1");
         }
         env.put("GOW3_FRAMES_AHEAD","0");
         env.put("TLOU_DESCRIPTOR_BULK","0");

@@ -131,11 +131,6 @@ static void map_time_report(void) {
 }
 static void write_lock(void) {
     if (!exclusive_depth++) {
-        if (shared_depth > 0) {
-            // Current thread already holds a read lock; release underlying reader count
-            // so write lock can be acquired without self-deadlock.
-            table_rdunlock();
-        }
         if (table_trywrlock()) {
             const uint64_t start=mono_ns();
             table_wrlock();
@@ -146,14 +141,7 @@ static void write_lock(void) {
     }
 }
 static void write_unlock(void) {
-    if (!--exclusive_depth) {
-        __atomic_add_fetch(&table_generation,1,__ATOMIC_RELEASE);
-        table_wrunlock();
-        if (shared_depth > 0) {
-            // Restore underlying read lock that was temporarily released for exclusive access.
-            table_rdlock();
-        }
-    }
+    if (!--exclusive_depth) { __atomic_add_fetch(&table_generation,1,__ATOMIC_RELEASE); table_wrunlock(); }
 }
 static void read_lock(void) { if (!exclusive_depth && !shared_depth++) table_rdlock(); }
 static void read_unlock(void) { if (!exclusive_depth && !--shared_depth) table_rdunlock(); }
