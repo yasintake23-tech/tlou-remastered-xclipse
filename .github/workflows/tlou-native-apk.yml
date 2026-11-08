@@ -183,6 +183,30 @@ jobs:
         with:
           path: out/android-bionic/experimental-development.jks
           key: tlou-development-signing-v2
+      - name: Restore cached pinned Vulkan driver packages
+        id: cache-drivers
+        if: ${{ !contains(github.event.head_commit.message, '[native-only]') }}
+        uses: actions/cache@v4
+        with:
+          path: out/android-bionic/apk-assets/drivers
+          key: tlou-pinned-drivers-v1
+      - name: Download verified build artifact for pinned driver packages on cache miss
+        if: ${{ !contains(github.event.head_commit.message, '[native-only]') && steps.cache-drivers.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64
+          path: out/driver-seed-apk
+          github-token: ${{ github.token }}
+          run-id: 42459300021
+      - name: Extract pinned Vulkan driver packages on cache miss
+        if: ${{ !contains(github.event.head_commit.message, '[native-only]') && steps.cache-drivers.outputs.cache-hit != 'true' }}
+        run: |
+          mkdir -p out/android-bionic/apk-assets/drivers
+          if [[ -s out/driver-seed-apk/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk ]]; then
+            unzip -j -o out/driver-seed-apk/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk "assets/drivers/*.zip" -d out/android-bionic/apk-assets/drivers/
+            rm -rf out/driver-seed-apk
+          fi
       - name: Assemble and sign actual TLOU Bionic APK
         if: ${{ !contains(github.event.head_commit.message, '[native-only]') }}
         shell: bash -el {0}
