@@ -23,10 +23,10 @@ public class XclipseRadvProfileTest {
         assertFalse(PortSettings.isXclipse540(null,null));
     }
 
-    @Test public void usesConservativeJobWorkersOnXclipse540ToPreventDeadlock() {
-        assertTrue(PortSettings.conservativeJobWorkers("SM-A566B",""));
-        assertTrue(PortSettings.conservativeJobWorkers("SM-A566E","Exynos 1580"));
-        assertTrue(PortSettings.conservativeJobWorkers("unknown","s5e8855"));
+    @Test public void keepsPatchedJobSleepEnabledOnXclipse540() {
+        assertFalse(PortSettings.conservativeJobWorkers("SM-A566B",""));
+        assertFalse(PortSettings.conservativeJobWorkers("SM-A566E","Exynos 1580"));
+        assertFalse(PortSettings.conservativeJobWorkers("unknown","s5e8855"));
         assertTrue(PortSettings.conservativeJobWorkers("23049PCD8G","SM7475"));
         assertFalse(PortSettings.conservativeJobWorkers("CPH2691","SM8750"));
     }

@@ -106,10 +106,7 @@ final class PortSettings {
     static boolean conservativeJobWorkers(String model,String soc) {
         final String normalizedModel=model==null?"":model.toUpperCase(Locale.ROOT);
         final String normalizedSoc=soc==null?"":soc.toUpperCase(Locale.ROOT);
-        // Galaxy A56 5G (Exynos 1580 / Xclipse 540) and Xiaomi 23049PCD8G hit
-        // HALT: Job System Deadlock Detected (corelib/job/job-scheduling.cpp:746)
-        // when job-sleep forces workers onto a condvar without patching counter-decrement wakes.
-        return isXclipse540(model,soc) || normalizedSoc.contains("SM7475") || normalizedModel.equals("23049PCD8G");
+        return normalizedSoc.contains("SM7475") || normalizedModel.equals("23049PCD8G");
     }
 
     static void environment(Context context,Map<String,String> env) {
