@@ -56,7 +56,14 @@ static ABI int32_t mutex_init(GuestMutex **out, GuestAttr **attr, const char *na
     pthread_mutexattr_t native_attr;
     int e = pthread_mutexattr_init(&native_attr);
     if (e) { free(mutex); return orbis_error(e); }
+#if defined(__ANDROID__)
+    // On Android Bionic, PTHREAD_MUTEX_ERRORCHECK strictly requires the unlocking thread TID to match the locking TID.
+    // When OrbisFiber tasks migrate across NdJobWorker threads, unlocking from a different worker thread returns EPERM (0x80020001),
+    // which deadlocks the job queue. PTHREAD_MUTEX_NORMAL permits cross-worker fiber unlocking.
+    int native_type = type == 2 ? PTHREAD_MUTEX_RECURSIVE : PTHREAD_MUTEX_NORMAL;
+#else
     int native_type = type == 2 ? PTHREAD_MUTEX_RECURSIVE : type == 3 ? PTHREAD_MUTEX_NORMAL : PTHREAD_MUTEX_ERRORCHECK;
+#endif
     e = pthread_mutexattr_settype(&native_attr, native_type);
     if (!e) e = pthread_mutex_init(&mutex->native, &native_attr);
     pthread_mutexattr_destroy(&native_attr);
