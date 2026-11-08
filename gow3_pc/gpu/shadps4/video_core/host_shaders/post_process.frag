@@ -10,15 +10,16 @@ layout (binding = 0) uniform sampler2D texSampler;
 
 layout (push_constant) uniform settings {
     float gamma;
-    bool hdr;
-    bool srgb_input;
+    uint hdr;
+    uint srgb_input;
 } pp;
 
 const float cutoff = 0.0031308, a = 1.055, b = 0.055, d = 12.92;
 vec3 gamma(vec3 rgb) {
+    float safe_gamma = max(pp.gamma, 0.01);
     return mix(
-        a * pow(rgb, vec3(1.0 / (2.4 + 1.0 - pp.gamma))) - b,
-        d * rgb / pp.gamma,
+        a * pow(max(rgb, vec3(0.0)), vec3(1.0 / (2.4 + 1.0 - safe_gamma))) - b,
+        d * rgb / safe_gamma,
         lessThan(rgb, vec3(cutoff))
     );
 }
@@ -35,10 +36,10 @@ vec3 degamma(vec3 rgb) {
 
 void main() {
     vec4 color_linear = texture(texSampler, uv);
-    if (pp.hdr) {
+    if (pp.hdr != 0u) {
         color = color_linear;
     } else {
-        if (pp.srgb_input) color_linear.rgb = degamma(color_linear.rgb);
+        if (pp.srgb_input != 0u) color_linear.rgb = degamma(color_linear.rgb);
         color = vec4(gamma(color_linear.rgb), color_linear.a);
     }
 }

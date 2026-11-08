@@ -688,6 +688,24 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
         format_info.flags &= ~vk::ImageCreateFlagBits::eBlockTexelViewCompatible;
         image_format_properties = instance.GetPhysicalDevice().getImageFormatProperties2(format_info);
     }
+    // Extended usage is optional if uncompressed views are not bound on this compressed format.
+    if (image_format_properties.result == vk::Result::eErrorFormatNotSupported &&
+        (format_info.flags & vk::ImageCreateFlagBits::eExtendedUsage)) {
+        format_info.flags &= ~vk::ImageCreateFlagBits::eExtendedUsage;
+        image_format_properties = instance.GetPhysicalDevice().getImageFormatProperties2(format_info);
+    }
+    // Some drivers refuse mutable flags on compressed textures without a format list.
+    if (image_format_properties.result == vk::Result::eErrorFormatNotSupported &&
+        (format_info.flags & vk::ImageCreateFlagBits::eMutableFormat)) {
+        format_info.flags &= ~vk::ImageCreateFlagBits::eMutableFormat;
+        image_format_properties = instance.GetPhysicalDevice().getImageFormatProperties2(format_info);
+    }
+    // TransferSrc is optional for sampled compressed textures uploaded through TransferDst.
+    if (image_format_properties.result == vk::Result::eErrorFormatNotSupported &&
+        (format_info.usage & vk::ImageUsageFlagBits::eTransferSrc)) {
+        format_info.usage &= ~vk::ImageUsageFlagBits::eTransferSrc;
+        image_format_properties = instance.GetPhysicalDevice().getImageFormatProperties2(format_info);
+    }
     if (image_format_properties.result == vk::Result::eSuccess) {
         usage_flags = format_info.usage;
         flags = format_info.flags;

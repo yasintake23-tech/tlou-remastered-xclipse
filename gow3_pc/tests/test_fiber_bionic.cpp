@@ -26,6 +26,8 @@ extern "C" void guest_cpu_fiber_switch(GuestFiberCpuState* p,void (*release)(voi
     if(previous) assert(static_cast<OrbisFiber*>(previous)->state==FiberState::Run);
 }
 extern "C" uint64_t guest_cpu_fiber_frame_pointer(const GuestFiberCpuState* p) { return p->rbp; }
+static thread_local void* fiber_slot;
+extern "C" void** runtime_thread_fiber_slot(void) { return &fiber_slot; }
 extern "C" void* runtime_low_map(size_t size,int protection) {
     void* p=mmap(nullptr,size,protection,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
     return p==MAP_FAILED ? nullptr : p;

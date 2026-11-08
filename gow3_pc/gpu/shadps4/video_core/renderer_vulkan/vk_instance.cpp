@@ -1243,6 +1243,49 @@ vk::Format Instance::GetSupportedFormat(const vk::Format format,
                 return vk::Format::eR8G8Unorm;
             }
             break;
+        case vk::Format::eBc1RgbaSrgbBlock:
+            if (IsFormatSupported(vk::Format::eBc1RgbaUnormBlock, flags)) {
+                return vk::Format::eBc1RgbaUnormBlock;
+            }
+            break;
+        case vk::Format::eBc1RgbSrgbBlock:
+            if (IsFormatSupported(vk::Format::eBc1RgbUnormBlock, flags)) {
+                return vk::Format::eBc1RgbUnormBlock;
+            }
+            if (IsFormatSupported(vk::Format::eBc1RgbaSrgbBlock, flags)) {
+                return vk::Format::eBc1RgbaSrgbBlock;
+            }
+            break;
+        case vk::Format::eBc2SrgbBlock:
+            if (IsFormatSupported(vk::Format::eBc2UnormBlock, flags)) {
+                return vk::Format::eBc2UnormBlock;
+            }
+            break;
+        case vk::Format::eBc3SrgbBlock:
+            if (IsFormatSupported(vk::Format::eBc3UnormBlock, flags)) {
+                return vk::Format::eBc3UnormBlock;
+            }
+            break;
+        case vk::Format::eBc4SnormBlock:
+            if (IsFormatSupported(vk::Format::eBc4UnormBlock, flags)) {
+                return vk::Format::eBc4UnormBlock;
+            }
+            break;
+        case vk::Format::eBc5SnormBlock:
+            if (IsFormatSupported(vk::Format::eBc5UnormBlock, flags)) {
+                return vk::Format::eBc5UnormBlock;
+            }
+            break;
+        case vk::Format::eBc6HSfloatBlock:
+            if (IsFormatSupported(vk::Format::eBc6HUfloatBlock, flags)) {
+                return vk::Format::eBc6HUfloatBlock;
+            }
+            break;
+        case vk::Format::eBc7SrgbBlock:
+            if (IsFormatSupported(vk::Format::eBc7UnormBlock, flags)) {
+                return vk::Format::eBc7UnormBlock;
+            }
+            break;
         default:
             break;
         }

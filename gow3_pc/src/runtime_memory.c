@@ -69,9 +69,10 @@ _Static_assert(sizeof(BatchEntry)==32,"PS4 batch map entry layout");
  * runtime_memory_gpu_protect on the same thread. Readers nest because the lock
  * prefers readers (glibc's default rwlock; rwlock_rp.h on Windows); a thread
  * holding it exclusively skips relocking. */
-/* Windows: winpthreads' rwlock blocks new readers behind a waiting writer, so a nested reader
- * deadlocks with it; rwlock_rp.h has glibc's reader preference. */
-#ifdef _WIN32
+/* Windows (winpthreads) and Android (Bionic): pthread_rwlock_t blocks new readers behind a
+ * waiting writer, so a nested or cross-thread reader deadlocks with it; rwlock_rp.h provides
+ * glibc's reader-preferring semantics. */
+#if defined(_WIN32) || defined(__ANDROID__)
 #include "rwlock_rp.h"
 static RpLock lock=RP_LOCK_INITIALIZER;
 #define table_rdlock() rp_read_lock(&lock)
@@ -88,6 +89,7 @@ static pthread_rwlock_t lock=PTHREAD_RWLOCK_INITIALIZER;
 #define table_trywrlock() pthread_rwlock_trywrlock(&lock)
 #endif
 static __thread unsigned exclusive_depth;
+static __thread unsigned shared_depth;
 /* Odd while a writer holds the lock; readers' region caches are valid for one even value. */
 static uint64_t table_generation;
 /* gow3 19 Oct 2026: time spent in guest memory maps, unmaps and releases, and waiting for the
@@ -141,8 +143,8 @@ static void write_lock(void) {
 static void write_unlock(void) {
     if (!--exclusive_depth) { __atomic_add_fetch(&table_generation,1,__ATOMIC_RELEASE); table_wrunlock(); }
 }
-static void read_lock(void) { if (!exclusive_depth) table_rdlock(); }
-static void read_unlock(void) { if (!exclusive_depth) table_rdunlock(); }
+static void read_lock(void) { if (!exclusive_depth && !shared_depth++) table_rdlock(); }
+static void read_unlock(void) { if (!exclusive_depth && !--shared_depth) table_rdunlock(); }
 static Block blocks[LIMIT];
 static Vma *vmas; static size_t vma_count, vma_capacity;
 #ifndef _WIN32

@@ -313,15 +313,12 @@ public final class GameActivity extends Activity {
             PortSettings.environment(this,env);
             String selectedDriverName=getSharedPreferences("tlou",MODE_PRIVATE)
                 .getString("driver_name","");
-            if(PortSettings.isXclipse540() &&
-                selectedDriverName.toLowerCase(Locale.ROOT).contains("radv")) {
-                // RADV Xclipse 27.0.0 documents DCC-off as the compatibility
-                // fallback for black, flickering and corrupted render targets.
-                // Keep debug tracing and slower optional conversion modes off.
-                env.put("RADV_XCLIPSE_DCC","0");
-                env.remove("RADV_XCLIPSE_LOG");
-                env.remove("RADV_DEBUG");
-                RunLog.write(this,"Xclipse 540 RADV profile: DCC disabled for render-target stability");
+            boolean xclipse540=PortSettings.isXclipse540();
+            if(XclipseRadvProfile.apply(env,xclipse540,selectedDriverName)) {
+                RunLog.write(this,XclipseRadvProfile.describe());
+            } else if(xclipse540) {
+                RunLog.write(this,"Xclipse 540 detected; custom RADV Xclipse driver not selected. " +
+                    "Keeping the selected/system Vulkan driver without RADV-specific flags.");
             }
             RunLog.write(this,PortSettings.experimentReport(this,env));
             String driver=getSharedPreferences("tlou",MODE_PRIVATE).getString("driver_path", "");

@@ -18,10 +18,23 @@ final class PortSettings {
     }
 
     static boolean isXclipse540() {
-        final String model=Build.MODEL==null?"":Build.MODEL.toUpperCase(Locale.ROOT);
-        final String soc=Build.VERSION.SDK_INT>=31 && Build.SOC_MODEL!=null
-            ?Build.SOC_MODEL.toUpperCase(Locale.ROOT):"";
-        return model.equals("SM-A566B") || soc.contains("EXYNOS 1580") || soc.contains("S5E8855");
+        final String model=Build.MODEL==null?"":Build.MODEL;
+        String soc=Build.VERSION.SDK_INT>=31 && Build.SOC_MODEL!=null
+            ?Build.SOC_MODEL:"";
+        if(soc.isEmpty()) {
+            final String hw=Build.HARDWARE==null?"":Build.HARDWARE;
+            final String board=Build.BOARD==null?"":Build.BOARD;
+            soc=hw+" "+board;
+        }
+        return isXclipse540(model,soc);
+    }
+
+    // Kept pure so every supported A56/Exynos identifier can be regression-tested.
+    static boolean isXclipse540(String model,String soc) {
+        final String normalizedModel=model==null?"":model.toUpperCase(Locale.ROOT);
+        final String normalizedSoc=soc==null?"":soc.toUpperCase(Locale.ROOT);
+        return (normalizedModel.startsWith("SM-A566") && normalizedModel.length() <= 9) ||
+            normalizedSoc.contains("EXYNOS 1580") || normalizedSoc.contains("S5E8855");
     }
 
     // Existing player-selected game, driver, patch and resolution preferences survive upgrades.
@@ -79,11 +92,21 @@ final class PortSettings {
     }
 
     static boolean conservativeJobWorkers() {
-        final String model=Build.MODEL==null?"":Build.MODEL.toUpperCase(Locale.ROOT);
-        final String soc=Build.VERSION.SDK_INT>=31 && Build.SOC_MODEL!=null
-            ?Build.SOC_MODEL.toUpperCase(Locale.ROOT):"";
-        // Do not apply this device-specific workaround globally to all Adreno.
-        return soc.contains("SM7475") || model.equals("23049PCD8G");
+        final String model=Build.MODEL==null?"":Build.MODEL;
+        String soc=Build.VERSION.SDK_INT>=31 && Build.SOC_MODEL!=null
+            ?Build.SOC_MODEL:"";
+        if(soc.isEmpty()) {
+            final String hw=Build.HARDWARE==null?"":Build.HARDWARE;
+            final String board=Build.BOARD==null?"":Build.BOARD;
+            soc=hw+" "+board;
+        }
+        return conservativeJobWorkers(model,soc);
+    }
+
+    static boolean conservativeJobWorkers(String model,String soc) {
+        final String normalizedModel=model==null?"":model.toUpperCase(Locale.ROOT);
+        final String normalizedSoc=soc==null?"":soc.toUpperCase(Locale.ROOT);
+        return normalizedSoc.contains("SM7475") || normalizedModel.equals("23049PCD8G");
     }
 
     static void environment(Context context,Map<String,String> env) {
@@ -143,7 +166,7 @@ final class PortSettings {
         // the more recent actual run had the three below OFF.
         env.put("TLOU_MEMORY_WALK_ONCE","1");
         env.put("TLOU_RING_BINDING_CURSOR","1");
-        env.put("TLOU_DRAW_COUNTER_TRIM","0");
+        env.put("TLOU_DRAW_COUNTER_TRIM","1");
         env.put("GOW3_TLOU_COMPUTE_MEMO","0");
         env.put("GOW3_TLOU_HOST_COPY_BATCH","0");
         env.put("TLOU_SRT_HOT_READBACKS","1");
@@ -162,6 +185,7 @@ final class PortSettings {
         // uses CPU-thread clocks only and remains disableable by an env override.
         // The native Android default is ON unless explicitly disabled.
         env.put("TLOU_CPU_PHASE_SAMPLES","1");
+        env.put("TLOU_FAST_RENDER_CORES","1");
         // Leave profiling truly disabled. Some native switches check presence,
         // so setting "0" instead of removing is incorrect.
         for(String name:new String[]{"GOW3_GPU_PROFILE","GOW3_FRAME_STATS","GOW3_PERF_DIAG"})
@@ -185,6 +209,10 @@ final class PortSettings {
         // normal gameplay; an explicit native diagnostic can still enable it.
         env.remove("TLOU_PHYSICS_COVERAGE");
         env.put("GOW3_ASYNC_SHADERS","1");
+        if (isXclipse540()) {
+            env.put("GOW3_ASYNC_SHADERS","0");
+            env.put("GOW3_TLOU_HOST_COPY_BATCH","1");
+        }
         env.put("GOW3_FRAMES_AHEAD","0");
         env.put("TLOU_DESCRIPTOR_BULK","0");
         env.put("GOW3_PREP_POOL","1");

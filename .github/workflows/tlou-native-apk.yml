@@ -2,7 +2,7 @@ name: TLOU Bionic Full Native and APK
 
 on:
   push:
-    branches: [android-bionic-stage1, tlou-ui-approval-log32-20261105, xclipse/enable-bc-textures]
+    branches: [android-bionic-stage1, tlou-ui-approval-log32-20261105, xclipse/enable-bc-textures, xclipse/exynos1580-v05]
     paths:
       - 'android/**'
       - 'android-launcher/**'
@@ -89,8 +89,21 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.14206865'
+      - name: Install micromamba binary with mirror fallback
+        run: |
+          mkdir -p "$HOME/micromamba-bin"
+          if ! (curl -fsSL --retry 3 --connect-timeout 15 "https://conda.anaconda.org/conda-forge/linux-64/micromamba-2.0.5-0.tar.bz2" | tar -xj -O bin/micromamba > "$HOME/micromamba-bin/micromamba") && \
+             ! (curl -fsSL --retry 3 --connect-timeout 15 "https://micro.mamba.pm/api/micromamba/linux-64/2.0.5" | tar -xj -O bin/micromamba > "$HOME/micromamba-bin/micromamba") && \
+             ! curl -fsSL --retry 3 --connect-timeout 15 "https://github.com/mamba-org/micromamba-releases/releases/download/2.0.5-0/micromamba-linux-64" -o "$HOME/micromamba-bin/micromamba"; then
+            echo "Failed to download micromamba from all mirrors" >&2
+            exit 1
+          fi
+          chmod +x "$HOME/micromamba-bin/micromamba"
+          "$HOME/micromamba-bin/micromamba" --version
       - uses: mamba-org/setup-micromamba@v2
         with:
+          download-micromamba: false
+          micromamba-binary-path: /home/runner/micromamba-bin/micromamba
           environment-file: ci/environment.yml
           cache-environment: true
           init-shell: bash
@@ -170,21 +183,45 @@ jobs:
         with:
           path: out/android-bionic/experimental-development.jks
           key: tlou-development-signing-v2
+      - name: Restore cached pinned Vulkan driver packages
+        id: cache-drivers
+        if: ${{ !contains(github.event.head_commit.message, '[native-only]') }}
+        uses: actions/cache@v4
+        with:
+          path: out/android-bionic/apk-assets/drivers
+          key: tlou-pinned-drivers-v1
+      - name: Download verified build artifact for pinned driver packages on cache miss
+        if: ${{ !contains(github.event.head_commit.message, '[native-only]') && steps.cache-drivers.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64
+          path: out/driver-seed-apk
+          github-token: ${{ github.token }}
+          run-id: 42459300021
+      - name: Extract pinned Vulkan driver packages on cache miss
+        if: ${{ !contains(github.event.head_commit.message, '[native-only]') && steps.cache-drivers.outputs.cache-hit != 'true' }}
+        run: |
+          mkdir -p out/android-bionic/apk-assets/drivers
+          if [[ -s out/driver-seed-apk/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk ]]; then
+            unzip -j -o out/driver-seed-apk/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk "assets/drivers/*.zip" -d out/android-bionic/apk-assets/drivers/
+            rm -rf out/driver-seed-apk
+          fi
       - name: Assemble and sign actual TLOU Bionic APK
         if: ${{ !contains(github.event.head_commit.message, '[native-only]') }}
         shell: bash -el {0}
         run: bash android/bionic/package_apk.sh
       - name: Verify APK payload and native dependency closure
         if: ${{ !contains(github.event.head_commit.message, '[native-only]') }}
-        run: python3 android/bionic/check_tools_apk.py out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk
+        run: python3 android/bionic/check_tools_apk.py out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk
       - name: Publish installable TLOU APK
         if: ${{ !contains(github.event.head_commit.message, '[native-only]') }}
         uses: actions/upload-artifact@v4
         with:
-          name: TheLastOfUsRemastered-Android-v0.1-arm64
+          name: TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64
           path: |
-            out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk
-            out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk.sha256
+            out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk
+            out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk.sha256
           if-no-files-found: error
       - name: Publish built native binaries
         uses: actions/upload-artifact@v4
@@ -262,7 +299,7 @@ jobs:
           gradle -p android-launcher :app:assembleRelease --no-daemon --max-workers=2
           sdk_tools="$ANDROID_HOME/build-tools/35.0.0"
           mkdir -p out/release
-          apk=out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk
+          apk=out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk
           "$sdk_tools/zipalign" -f -p 4 android-launcher/app/build/outputs/apk/release/app-release-unsigned.apk out/aligned.apk
           "$sdk_tools/apksigner" sign --ks out/android-bionic/experimental-development.jks --ks-key-alias tlou-bionic --ks-pass pass:TLOU-Bionic-development --key-pass pass:TLOU-Bionic-development --out "$apk" out/aligned.apk
           "$sdk_tools/apksigner" verify --verbose "$apk"
@@ -273,14 +310,14 @@ jobs:
           sha256sum "$apk" > "$apk.sha256"
       - name: Validate final APK and byte-identical native payload
         run: |
-          python3 android/bionic/check_tools_apk.py out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk
+          python3 android/bionic/check_tools_apk.py out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk
           python3 - <<'PYCODE'
           import zipfile
           from pathlib import Path
           import importlib.util
           spec=importlib.util.spec_from_file_location('reuse','android/bionic/reuse_apk.py')
           reuse=importlib.util.module_from_spec(spec);spec.loader.exec_module(reuse)
-          with zipfile.ZipFile('out/source-apk/TheLastOfUsRemastered-Android-v0.1-arm64.apk') as old, zipfile.ZipFile('out/release/TheLastOfUsRemastered-Android-v0.1-arm64.apk') as new:
+          with zipfile.ZipFile('out/source-apk/TheLastOfUsRemastered-Android-v0.1-arm64.apk') as old, zipfile.ZipFile('out/release/TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64.apk') as new:
               names=[n for n in old.namelist() if reuse.payload(n) is not None and not n.endswith('/')]
               assert names
               for n in names:
@@ -295,7 +332,7 @@ jobs:
           PYCODE
       - uses: actions/upload-artifact@v4
         with:
-          name: TheLastOfUsRemastered-Android-v0.1-arm64
+          name: TheLastOfUsRemastered-Android-v0.5-ContentBC-arm64
           path: out/release/*
           if-no-files-found: error
       - name: Save UI tests and diagnostics

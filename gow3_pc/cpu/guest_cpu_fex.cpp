@@ -232,7 +232,7 @@ public:
             if (hooks[i].address != rip) {
                 continue;
             }
-            GuestRegs regs;
+            GuestRegs regs{};
             std::memcpy(regs.gpr, s.gregs, sizeof(regs.gpr));
             regs.rip = rip;
             hooks[i].hook(&regs);
@@ -532,26 +532,47 @@ uintptr_t guest_cpu_stack_pointer(void) {
 }
 
 int guest_cpu_signal_regs(const void* ucontext, GuestRegs* regs) {
+    std::memset(regs, 0, sizeof(*regs));
     const auto& m = static_cast<const ucontext_t*>(ucontext)->uc_mcontext;
     GuestThread* t = self;
     if (t) {
-        const auto& s = t->thread->CurrentFrame->State;
+        auto& s = t->thread->CurrentFrame->State;
         if (ctx->IsAddressInCodeBuffer(t->thread, m.pc)) {
             std::memcpy(regs->gpr, s.gregs, sizeof(regs->gpr));
             const auto& config = delegator.GetConfig();
             for (unsigned i = 0; i < config.SRAGPRCount; ++i) {
                 regs->gpr[i] = m.regs[config.SRAGPRMapping[i]];
             }
+            for (unsigned i = 0; i < 16; ++i) {
+                const uint64_t* x = Xmm(s, i);
+                regs->xmm[i][0] = x[0];
+                regs->xmm[i][1] = x[1];
+            }
+            const FpsimdRecord* fpsimd = Fpsimd(const_cast<ucontext_t*>(static_cast<const ucontext_t*>(ucontext)));
+            if (fpsimd) {
+                for (unsigned i = 0; i < config.SRAFPRCount && i < 16; ++i) {
+                    uint8_t host_reg = config.SRAFPRMapping[i];
+                    if (host_reg < 32) {
+                        std::memcpy(&regs->xmm[i], &fpsimd->v[host_reg], sizeof(regs->xmm[i]));
+                    }
+                }
+            }
+            regs->has_xmm = 1;
             regs->rip = ctx->RestoreRIPFromHostPC(t->thread, m.pc);
             return GUEST_CPU_IN_GUEST;
         }
         if (t->depth) {
             std::memcpy(regs->gpr, s.gregs, sizeof(regs->gpr));
+            for (unsigned i = 0; i < 16; ++i) {
+                const uint64_t* x = Xmm(s, i);
+                regs->xmm[i][0] = x[0];
+                regs->xmm[i][1] = x[1];
+            }
+            regs->has_xmm = 1;
             regs->rip = ReadGuest(s.gregs[FEXCore::X86State::REG_RSP]);
             return GUEST_CPU_IN_HOST_CALL;
         }
     }
-    std::memset(regs, 0, sizeof(*regs));
     regs->rip = m.pc;
     regs->gpr[GUEST_RSP] = m.sp;
     return 0;

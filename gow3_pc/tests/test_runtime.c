@@ -303,6 +303,9 @@ static void rw_concurrency(void) {
     assert(pthread_create(&writer,NULL,writer_worker,&f)==0);
     barrier(&f.writer_ready);
     assert((uint32_t)rw_destroy(&f.lock)==0x80020010);
+    struct timespec nap={0,5000000}; nanosleep(&nap,NULL);
+    /* A reader must succeed while a writer is queued behind an active reader (JobArray child case). */
+    assert(rw_read(&f.lock)==0 && rw_unlock(&f.lock)==0);
     assert(atomic_load(&f.value)==0);
     barrier(&f.release);
     assert(pthread_join(reader,NULL)==0 && pthread_join(writer,NULL)==0);

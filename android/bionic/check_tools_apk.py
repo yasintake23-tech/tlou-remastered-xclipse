@@ -62,6 +62,20 @@ with zipfile.ZipFile(sys.argv[1]) as apk:
         data = apk.read(name)
         if hashlib.sha256(data).hexdigest() != expected:
             raise ValueError(f'Incorrect driver digest: {name}')
+
+    # This candidate is explicitly targeted at Exynos 1580 / Xclipse 540.
+    # Verify the pinned RADV package itself, not just the app's Java selection code.
+    xclipse_driver = 'assets/drivers/radv-xclipse-27.0.0-devel-fe9b894.zip'
+    xclipse_sha = '9325769617812ddca2051c40364e33a2d85c6b3fa8c6c3e6208eb251549d4745'
+    xclipse_data = apk.read(xclipse_driver)
+    if hashlib.sha256(xclipse_data).hexdigest() != xclipse_sha:
+        raise ValueError('Incorrect RADV Xclipse 27.0.0-RC1 archive digest')
+    with zipfile.ZipFile(io.BytesIO(xclipse_data)) as xclipse:
+        xclipse_names = set(xclipse.namelist())
+        for required in ('meta.json', 'vulkan.radeon.so', 'NOTICE.txt'):
+            if required not in xclipse_names:
+                raise ValueError(f'RADV Xclipse package is missing {required}')
+        arm64(xclipse.read('vulkan.radeon.so'), 'RADV Xclipse Vulkan driver')
     ui_rows = apk.read('assets/ui-translations.tsv').decode('utf-8').splitlines()
     ui_rows = [line for line in ui_rows if line and not line.startswith('#')]
     if not ui_rows or any(len(line.split(chr(9))) != 10 for line in ui_rows):

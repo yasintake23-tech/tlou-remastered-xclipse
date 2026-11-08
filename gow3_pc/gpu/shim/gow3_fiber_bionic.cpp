@@ -87,6 +87,11 @@ Record& RecordFor(OrbisFiber* f) {
     return *record;
 }
 
+void SetActiveFiber(OrbisFiber* f) {
+    session.active=f;
+    if (void** slot=runtime_thread_fiber_slot()) *slot=f;
+}
+
 void EntryReturned() {
     // The guest reached the return stub rather than sceFiberReturnToThread.
     auto* fiber=session.active;
@@ -94,7 +99,7 @@ void EntryReturned() {
         std::fprintf(stderr,"TLOU Fiber: guest entry returned without yielding (%s)\n",fiber->name);
         fiber->state=FiberState::Terminated;
     }
-    session.active=nullptr;
+    SetActiveFiber(nullptr);
     if (session.root_return) *session.root_return=ORBIS_FIBER_ERROR_STATE;
     if (session.root) guest_cpu_fiber_switch(session.root,nullptr,nullptr);
 }
@@ -191,7 +196,7 @@ s32 sceFiberRunImpl(OrbisFiber* f,void* memory,u64 bytes,u64 incoming,u64* outgo
     if(!session.root) session.root=guest_cpu_fiber_create();
     guest_cpu_fiber_save(session.root);
     session.root_return=outgoing;
-    session.active=f;
+    SetActiveFiber(f);
     guest_cpu_fiber_switch(RecordFor(f).cpu,nullptr,nullptr);
     return ORBIS_OK;
 }
@@ -221,7 +226,7 @@ s32 sceFiberSwitchImpl(OrbisFiber* target,void* memory,u64 bytes,u64 incoming,u6
         target->state=FiberState::Idle;
         return ORBIS_FIBER_ERROR_RANGE;
     }
-    session.active=target;
+    SetActiveFiber(target);
     guest_cpu_fiber_switch(RecordFor(target).cpu,ReleasePrevious,previous);
     return ORBIS_OK;
 }
@@ -237,7 +242,7 @@ s32 sceFiberReturnToThread(u64 argument,u64* next) {
     r.has_continuation=true;
     r.incoming_argument=next;
     if(session.root_return) *session.root_return=argument;
-    session.active=nullptr;
+    SetActiveFiber(nullptr);
     guest_cpu_fiber_switch(session.root,ReleasePrevious,current);
     return ORBIS_OK;
 }
