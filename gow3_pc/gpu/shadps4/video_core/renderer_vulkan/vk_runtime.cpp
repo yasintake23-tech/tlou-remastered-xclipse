@@ -794,21 +794,38 @@ void Runtime::ResolveImage(VideoCore::Image* src, VideoCore::Image* dst,
         FlushBarriers();
     }
 
-    const auto [src_layers, dst_layers] = SanitizeCopyLayers(src->info, dst->info, 1);
+    const auto vk_src_type = ConvertImageType(src->info.type);
+    const auto vk_dst_type = ConvertImageType(dst->info.type);
+    u32 resolve_layers = std::min(src_range.extent.layers, dst_range.extent.layers);
+    if (vk_src_type == vk::ImageType::e3D || vk_dst_type == vk::ImageType::e3D) {
+        resolve_layers = 1;
+    } else {
+        if (src_range.base.layer + resolve_layers > src->info.resources.layers) {
+            resolve_layers = src->info.resources.layers > src_range.base.layer
+                                 ? (src->info.resources.layers - src_range.base.layer)
+                                 : 1;
+        }
+        if (dst_range.base.layer + resolve_layers > dst->info.resources.layers) {
+            resolve_layers = dst->info.resources.layers > dst_range.base.layer
+                                 ? (dst->info.resources.layers - dst_range.base.layer)
+                                 : 1;
+        }
+    }
+
     if (!needs_resolve) {
         const vk::ImageCopy region = {
             .srcSubresource{
                 .aspectMask = vk::ImageAspectFlagBits::eColor,
                 .mipLevel = 0,
                 .baseArrayLayer = src_range.base.layer,
-                .layerCount = src_layers,
+                .layerCount = resolve_layers,
             },
             .srcOffset = {0, 0, 0},
             .dstSubresource{
                 .aspectMask = vk::ImageAspectFlagBits::eColor,
                 .mipLevel = 0,
                 .baseArrayLayer = dst_range.base.layer,
-                .layerCount = dst_layers,
+                .layerCount = resolve_layers,
             },
             .dstOffset = {0, 0, 0},
             .extent = {src->info.size.width, src->info.size.height, 1},
@@ -824,14 +841,14 @@ void Runtime::ResolveImage(VideoCore::Image* src, VideoCore::Image* dst,
                 .aspectMask = vk::ImageAspectFlagBits::eColor,
                 .mipLevel = 0,
                 .baseArrayLayer = src_range.base.layer,
-                .layerCount = src_layers,
+                .layerCount = resolve_layers,
             },
             .srcOffset = {0, 0, 0},
             .dstSubresource{
                 .aspectMask = vk::ImageAspectFlagBits::eColor,
                 .mipLevel = 0,
                 .baseArrayLayer = dst_range.base.layer,
-                .layerCount = dst_layers,
+                .layerCount = resolve_layers,
             },
             .dstOffset = {0, 0, 0},
             .extent = {src->info.size.width, src->info.size.height, 1},

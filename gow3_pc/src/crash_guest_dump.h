@@ -19,6 +19,20 @@ static inline void dump_guest_fault_regs(int fd, const GuestRegs *regs, uintptr_
         memcpy(line+15,names[i],3);crash_hex(line+19,regs->gpr[i]);
         ssize_t result=write(fd,line,sizeof(line)-1);(void)result;
     }
+    uint8_t opcodes[16];
+    struct iovec l_op={opcodes,sizeof(opcodes)}, r_op={(void *)regs->rip,sizeof(opcodes)};
+    if (regs->rip && process_vm_readv(getpid(),&l_op,1,&r_op,1,0)==(ssize_t)sizeof(opcodes)) {
+        char oline[72] = "Guest bytes at RIP: ";
+        size_t pos = 20;
+        static const char hexchars[] = "0123456789abcdef";
+        for (unsigned i=0;i<16;++i) {
+            oline[pos++] = hexchars[(opcodes[i] >> 4) & 0xf];
+            oline[pos++] = hexchars[opcodes[i] & 0xf];
+            oline[pos++] = ' ';
+        }
+        oline[pos-1] = '\n';
+        ssize_t result=write(fd,oline,pos);(void)result;
+    }
     uintptr_t rbp=(uintptr_t)regs->gpr[GUEST_RBP];
     for (unsigned depth=0;depth<16 && rbp;++depth) {
         uintptr_t frame[2];
