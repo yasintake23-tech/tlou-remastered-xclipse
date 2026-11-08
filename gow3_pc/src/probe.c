@@ -591,8 +591,9 @@ static void fault(int sig, siginfo_t *info, void *context) {
     /* Never unwind through a FEX JIT frame from a fatal signal. The Android
      * unwinder/allocator can block or fault again before _exit. Registers and
      * bounded guest frame reads do not acquire renderer/allocator locks. */
-    if (guest) dump_guest_fault_regs(2,&regs,(uintptr_t)image);
+    if (guest) dump_guest_fault_regs(2,&regs,(uintptr_t)image,uc);
 #else
+    if (guest) dump_guest_fault_regs(2,&regs,(uintptr_t)image,uc);
     if (gpu_enabled) gow3gpu_dump_guest_writes(context);
     /* Host call chain (frames with unwind info; guest frames end it). */
     void *frames[32];

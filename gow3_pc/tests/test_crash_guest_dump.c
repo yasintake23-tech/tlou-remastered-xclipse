@@ -18,9 +18,9 @@ int main(void) {
         struct iovec local={probe,sizeof(probe)},remote={caller,sizeof(caller)};
         int can_read=process_vm_readv(getpid(),&local,1,&remote,1,0)==(ssize_t)sizeof(probe);
         if (!can_read) { const char note[]="frame-read-unavailable\n";ssize_t r=write(fds[1],note,sizeof(note)-1);(void)r; }
-        dump_guest_fault_regs(fds[1],&regs,0x400000);
+        dump_guest_fault_regs(fds[1],&regs,0x400000,NULL);
         regs.gpr[GUEST_RBP]=1; // unreadable frame must terminate the walk safely
-        dump_guest_fault_regs(fds[1],&regs,0x400000);
+        dump_guest_fault_regs(fds[1],&regs,0x400000,NULL);
         _exit(139);
     }
     close(fds[1]);char text[8192];size_t used=0;ssize_t n;
